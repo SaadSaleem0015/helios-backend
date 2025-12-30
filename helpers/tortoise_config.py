@@ -37,6 +37,7 @@ TORTOISE_CONFIG = {
                 "models.schedule_call",
                 "models.lead_status",
                 "models.termsandconditions",
+                "models.zoho_crm",
                 "aerich.models"
             ]
         }

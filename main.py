@@ -1,3 +1,4 @@
+
 from dotenv import load_dotenv
 
 from controllers.admin_controller import admin_router
@@ -17,6 +18,7 @@ from controllers.auth_controller import auth_router
 from controllers.admin_statictics_controller import admin_statistics_router
 from controllers.lead_controller import leads_router
 from controllers.stripe_controller import stripe_router
+from controllers.crm_controller import crm_router
 
 
 
@@ -46,6 +48,7 @@ app.include_router(schedule_router, prefix = "/api" , tags = {"Schedule Router"}
 app.include_router(admin_router, prefix = "/api" , tags = {"Admin"})
 app.include_router(terms_router, prefix = "/api" , tags = {"Terms "})
 app.include_router(default_settings_router, prefix = "/api" , tags = {"Defualt Settings "})
+app.include_router(crm_router, prefix='/api', tags=['CRM Integration'])
 
 
 
