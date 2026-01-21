@@ -6,12 +6,14 @@ import httpx
 from helpers.jwt_token import get_admin, get_current_user
 from helpers.vapi_helper import generate_token, get_headers
 from models.call_log import CallLog
+from models.lead import Lead
 from models.zoho_crm import ZohoCRM
 from pydantic import BaseModel
 from models.user import User
 from datetime import datetime
 from tortoise.expressions import Q
 from datetime import datetime
+from models.file import File
 from typing import Optional
 import httpx
 import requests
@@ -104,20 +106,60 @@ async def fetch_zoho_leads(current_user: Annotated[User, Depends(get_current_use
             "converted": "true",
             "per_page": 40
         }
+
         timeout = httpx.Timeout(10.0)
 
         async with httpx.AsyncClient(timeout=timeout) as client:
             response = await client.get(ZOHO_LEADS_URL, headers=headers, params=params)
-            if response.status_code != 200:
-                raise HTTPException(status_code=response.status_code, detail="Failed to fetch leads from Zoho CRM")
-            response.raise_for_status()
-            result = response.json()            
-        
-        return {
-            "leads": result.get("data", [])
-        }
+
+        if response.status_code != 200:
+            raise HTTPException(status_code=response.status_code, detail="Failed to fetch leads from Zoho CRM")
+
+        data = response.json().get("data", [])
+        # return data
+        # ---------- FILE HANDLING ----------
+
+        file = await File.get_or_none(user=current_user, type="zoho")
+
+        if not file:
+            file = await File.create(
+                name="Zoho Leads",
+                type="zoho",
+                user=current_user
+            )
+
+        # ---------- SAVE LEADS ----------
+        for lead in data:
+            phone = lead.get("Phone")
+
+
+            # skip if phone missing
+            if not phone:
+                continue
+      
+
+            # check duplicate by phone
+            exists = await Lead.filter(mobile=phone).exists()
+            if exists:
+                continue
+
+            await Lead.create(
+                first_name="",
+                last_name=lead.get("Last_Name", ""),
+                email=lead.get("Email", ""),
+                mobile=phone,
+                state=None,
+                timezone=None,
+                other_data=lead,
+                file=file
+            )
+        print("90-090-09")
+        all_leads = await Lead.filter(file=file).all()
+        return {"leads": all_leads , "message": "Leads fetched and stored successfully"}
+
     except Exception as e:
-         raise HTTPException(status_code=500, detail="Failed to fetch leads from Zoho CRM.")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch leads from Zoho CRM. {e}")
+
 
 
 @crm_router.get("/generate-zoho-access-token")

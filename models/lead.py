@@ -5,7 +5,7 @@ class Lead(Model):
     id = fields.IntField(primary_key=True)
     first_name = fields.CharField(max_length=255)
     last_name = fields.CharField(max_length=255)
-    email = fields.CharField(max_length=255)
+    email = fields.CharField(max_length=255, null = True)
     add_date = fields.DateField(null=True)
     # salesforce_id = fields.CharField(max_length=255, null=True) 
     mobile = fields.CharField(max_length=255)
@@ -13,7 +13,7 @@ class Lead(Model):
     timezone = fields.CharField(max_length = 255 , null = True) 
     dnc = fields.BooleanField(default=False)
     # submit_for_approval = fields.BooleanField(default=False) 
- 
+    deleted = fields.BooleanField(default=False)
     other_data = fields.JSONField(null=True) #null ture
     file = fields.ForeignKeyField("models.File" , related_name="leads", null = True)
     last_called_at = fields.DatetimeField(null = True)  

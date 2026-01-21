@@ -8,6 +8,7 @@ from tortoise.transactions import in_transaction
 import os 
 import dotenv
 # from helpers.criteria_check import balance_count, has_payment_method,can_buy_number
+from helpers.criteria_check import balance_count, has_payment_method
 from helpers.jwt_token  import get_admin, get_current_user
 from helpers.vapi_helper import get_headers
 from models.assistant import Assistant
@@ -16,6 +17,7 @@ from models.assistant import Assistant
 # from models.paymentMethod import PaymentMethod
 from models.purchased_number import PurchasedNumber
 # from models.spent import Spent
+from models.spent import Spent
 from models.user import User
 # from models.vv_adminSetting import VVadminSetting
 
@@ -36,6 +38,7 @@ class PhoneNumberRequest(BaseModel):
 class PurchaseNumberRequest(BaseModel):
     phone_number: List[str]  
     
+VAPI_WEBHOOK_URL = "https://ff4f88149eb4.ngrok-free.app/api/webhooks/vapi"
     
 
 account_sid = os.environ['TWILIO_ACCOUNT_SID']
@@ -43,7 +46,71 @@ auth_token = os.environ['TWILIO_AUTH_TOKEN']
 print("account_sid",account_sid)
 client = Client(account_sid, auth_token)
 
+@twilio_router.post("/update-all-vapi-server-urls")
+async def update_all_vapi_phone_server_urls(
+    current_user: User = Depends(get_current_user)  # Restrict to admin
+):
+    """
+    Updates server.url on ALL existing PurchasedNumber records in Vapi using
+    the same payload structure as /purchase_phone_number.
+    Also sets assistantId to null to ensure assistant-request webhook is triggered.
+    """
+    numbers = await PurchasedNumber.all()  # Add .filter(...) if you want to limit scope
+    if not numbers:
+        return {"success": True, "detail": "No purchased numbers found."}
 
+    updated = 0
+    failures = []
+
+    async with httpx.AsyncClient() as client:
+        for pn in numbers:
+            if not pn.vapi_phone_uuid:
+                failures.append(f"{pn.phone_number}: Missing vapi_phone_uuid")
+                continue
+
+            # Use the exact same structure as in purchase_phone_number
+            payload = {
+                    "assistantId": None, 
+
+                    "server": {
+                        "url": VAPI_WEBHOOK_URL,
+                    },
+                    # "server": {
+                    #     "url": VAPI_WEBHOOK_URL,
+                    #     # Optional: add secret if you want Bearer auth from Vapi
+                    #     # "secret": os.getenv("VAPI_WEBHOOK_SECRET")
+                    # },
+            }
+
+            resp = await client.patch(
+                f"https://api.vapi.ai/phone-number/{pn.vapi_phone_uuid}",
+                json=payload,
+                headers=get_headers()
+            )
+
+            if resp.status_code in (200, 204):
+                updated += 1
+                print(f"Success: {pn.phone_number} ({pn.vapi_phone_uuid})")
+            else:
+                error_text = resp.text[:200] if resp.text else "No response body"
+                failures.append(
+                    f"{pn.phone_number} ({pn.vapi_phone_uuid}): "
+                    f"{resp.status_code} - {error_text}"
+                )
+
+    detail = f"Updated {updated} of {len(numbers)} phone numbers."
+    if failures:
+        detail += f"\nFailures ({len(failures)}): " + "; ".join(failures[:5])
+        if len(failures) > 5:
+            detail += f" ... and {len(failures)-5} more."
+
+    return {
+        "success": updated > 0 or len(numbers) == 0,
+        "detail": detail,
+        "total": len(numbers),
+        "updated": updated,
+        "failures": failures
+    }
 @twilio_router.post("/number_info")
 def check_sms_capability(phone_number_sid: str):
     try:
@@ -151,22 +218,21 @@ async def purchase_phone_number(request: PurchaseNumberRequest, user: Annotated[
         #         print(f"Free trial user purchasing first number. Current count: {total_number}")
         
         # elif not user.has_active_subscription:
-        #     balance = await balance_count(main_admin.id)
-        #     if balance < 5:
-        #         print("Balance is less than 5")
-        #         return {"success": False, "detail": "Insufficient balance."}
+       
         
         # print("Proceeding with number purchase") 
             
         # if user.has_active_subscription:
-        #     payment_method = await has_payment_method(main_admin)
-                
-        #     if not payment_method:
-        #         return {
-        #             "success": False,
-        #             "detail": "Unable to purchase number. You must have an active payment method first.",
-        #         }
-        
+        payment_method = await has_payment_method(user)      
+        if not payment_method:
+                return {
+                    "success": False,
+                    "detail": "Unable to purchase number. You must have an active payment method first.",
+                }
+        balance = await balance_count(user.id)
+        if balance < 5:
+                print("Balance is less than 5")
+                return {"success": False, "detail": "Insufficient balance."}
 
         SMS_URL = os.getenv("SMS_URL")
         async with in_transaction():
@@ -186,6 +252,16 @@ async def purchase_phone_number(request: PurchaseNumberRequest, user: Annotated[
                     "twilioAccountSid": os.environ.get('TWILIO_ACCOUNT_SID'),
                     "twilioAuthToken": os.environ.get('TWILIO_AUTH_TOKEN'),
                     "name": "Twilio Number",
+                    "server": {
+
+                        "url": VAPI_WEBHOOK_URL,
+
+                    }
+                    # "serverUrl": VAPI_WEBHOOK_URL
+                    # "server": {
+                    #     "url": VAPI_WEBHOOK_URL  # e.g., "https://yourdomain.com/webhooks/vapi" - set this env var to your backend endpoint
+                    #     # Optional: "secret": "your-secret-for-auth" if you want Vapi to send a Bearer token
+                    # }
                 }
               
                 attach_url = os.environ.get('VAPI_ATTACH_PHONE_URL')
@@ -208,7 +284,11 @@ async def purchase_phone_number(request: PurchaseNumberRequest, user: Annotated[
                             iso_country=None,
                         )
                         purchased_numbers.append(purchased_entry.phone_number)
-            
+                await Spent.create(
+                    user=user,
+                    spent_money=user_setting.phone_number_price,
+                    description="Purchased a phone number"
+                )
             # user_setting = await DefaultSettings.first()
             # main_admin = await User.filter(company_id=user.company_id, main_admin=True, role="company_admin").first()
 

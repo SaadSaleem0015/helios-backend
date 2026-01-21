@@ -1,3 +1,4 @@
+import math
 from models.call_log import CallLog
 from models.payment import Payment
 from models.paymentMethod import PaymentMethod
@@ -143,3 +144,7 @@ async def can_process_call(user_id: int) -> bool:
             return True 
 
     return False  
+
+def minimum_balance_for_call(seconds):
+    minutes = math.ceil(seconds / 60)
+    return minutes + 1    

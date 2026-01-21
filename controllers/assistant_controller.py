@@ -1,17 +1,15 @@
-import collections
-from dataclasses import Field
 from datetime import date, datetime, time, timedelta
 from typing import Annotated, List, Optional
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException,Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 import httpx
-from controllers.call_controller import get_call_details
-# from helpers.criteria_check import balance_count,can_process, check_balance, has_payment_method, user_criteria_approved
+from controllers.call_controller import get_call_details, handle_end_of_call_report
+from helpers.criteria_check import balance_count, has_payment_method, minimum_balance_for_call
 from helpers.jwt_token import get_admin, get_current_user
 from models.assistant import Assistant
 from models.call_log import CallLog
 from models.lead import Lead
-# from models.vv_adminSetting import  VVadminSetting
-# from models.defaultSettings import  DefaultSettings
+from models.super_admin_setting import SuperAdminSetting
+from models.defaultSettings import  DefaultSettings
 from models.purchased_number import PurchasedNumber
 from helpers.vapi_helper import user_add_payload,get_headers,generate_token
 from models.user import User
@@ -31,7 +29,7 @@ dotenv.load_dotenv()
 assistant_router = APIRouter()
 header = get_headers()
 token = generate_token()
-
+VAPI_WEBHOOK_URL = "https://ff4f88149eb4.ngrok-free.app/api/webhooks/vapi"
 
 class PhoneCallRequest(BaseModel):
     api_key: str
@@ -134,10 +132,108 @@ class AttachNumberRequest(BaseModel):
 class Languages(BaseModel):
     languages: List[str]
     
- 
+from fastapi import APIRouter, Request, HTTPException, Response
+from pydantic import BaseModel
+import os
+from typing import Dict, Any
+
+
+class VapiAssistantRequest(BaseModel):
+    message: Dict[str, Any]
+    call: Dict[str, Any]
+
+@assistant_router.post("/webhooks/vapi")
+async def vapi_webhook(request: Request):
+    """
+    Handles Vapi server events, primarily 'assistant-request' for inbound call gating.
+    - Checks user balance for the called number.
+    - Rejects low-balance calls with a spoken message.
+    - Allows by returning the user's assistantId.
+    """
+    print("Webhook call hwi hai", request)
+    try:
+        payload = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON payload")
+    
+    message_type = payload.get("message", {}).get("type")
+    print("message_type", message_type)
+    if message_type == "end-of-call-report":
+        await handle_end_of_call_report(payload)
+        return Response(status_code=204)
+    
+    if message_type != "assistant-request":
+        # Acknowledge other events (e.g., future call-started, end-of-call-report)
+        return Response(status_code=204)  # No content – Vapi expects quick ack
+   
+    print("payload", payload)
+    # Extract key info from call
+    call_data = payload.get("call", {})
+    called_number = payload["message"]["phoneNumber"]["number"]
+    caller_number = payload["message"]["call"]["customer"]["number"]
+    print("Caller:", caller_number)
+    print("Called:", called_number)
+    
+    if not called_number:
+        # Rare, but reject if no called number
+        return {"error": "Invalid call routing. Please contact support."}
+    
+    # Lookup the purchased number → user
+    purchased_num = await PurchasedNumber.filter(phone_number=called_number).first()
+    if not purchased_num:
+        return {"error": "This number is not active currently."}
+    print("purchased_num", purchased_num.phone_number)
+    
+    
+    user = await User.filter(id=purchased_num.user_id).first()
+    print("user", user.email)
+      # Assuming user relation
+    if not user:
+        return {"error": "Account not found for this number."}
+    print("caller_number  aa hai 1222312 userrrrrrrrrrr----- ",called_number)
+    
+    # Your balance/threshold check (adapt to your logic)
+    # Example: require at least $5 or whatever your min is
+    user_balance = await balance_count(user.id)  # Or user.balance if direct field
+    if user_balance < 5:
+        return {
+            "error": "Sorry, your account balance is too low to receive calls right now. "
+                     "Please top up your account via the dashboard and try again."
+        }
+    assistant = await Assistant.filter(vapi_phone_uuid = purchased_num.vapi_phone_uuid).first()
+
+    # Optional: Add more checks (e.g., business hours, user active status, spam caller, etc.)
+    # if not await is_business_hours():
+    #     return {"error": "We're currently closed. Please call during business hours."}
+
+    # Allowed → Return the saved assistant ID (fastest, uses your pre-created assistant)
+    # Store assistantId in PurchasedNumber or User when creating assistant
+    assistant_id = assistant.vapi_assistant_id  # Adjust field name if different
+    print("assistant_id ----- ",assistant_id)
+
+    if not assistant_id:
+        # Fallback: reject or return transient config
+        return {"error": "No assistant configured for this number."}
+
+    return {"assistantId": assistant_id}
+
+    # Alternative: Return full transient assistant config (if you want dynamic per-call changes)
+    # return {
+    #     "assistant": {
+    #         "firstMessage": "Hello! Welcome to our service.",
+    #         "model": {"provider": "openai", "model": "gpt-4o-mini"},
+    #         "voice": {"provider": "elevenlabs", "voiceId": "your-voice-id"},
+    #         # Add system prompt, etc.
+    #     }
+    # } 
+
 @assistant_router.post("/assistants")
 async def create_assistant(assistant: AssistantCreate, user: User = Depends(get_current_user)):
     try:
+        balance = await balance_count(user.id)
+        if balance < 5:
+                print("Insufficient balance, skipping...")
+                return {"success" : False, "detail": "Insufficient balance. Can't Call"}
 
         required_fields = [
             'name', 'provider', 'first_message', 'model',
@@ -197,10 +293,8 @@ async def create_assistant(assistant: AssistantCreate, user: User = Depends(get_
             
             if assistant.attached_Number:
                 new_number_uuid = None
-                print("assistant.attached_Number",assistant.attached_Number)
                 new_phonenumber = await PurchasedNumber.filter(phone_number = assistant.attached_Number).first()
                 new_number_uuid = new_phonenumber.vapi_phone_uuid
-                print("new_number_uuid",new_number_uuid)
                 isNumberAttachedWithPreviousAssistant = await Assistant.filter(vapi_phone_uuid = new_number_uuid , user = user).first()
 
                 if isNumberAttachedWithPreviousAssistant:
@@ -783,14 +877,28 @@ async def assistant_call(
         #         }
         #     else:
         #         print("have remaining call minutes in free trial")
-                
-                
-        # payment_method = await has_payment_method(user)
-        # if not payment_method:
-        #    return {
-        #         "success":False,
-        #         "detail": f"Unable to make a call. You should have an active payment method first.",
-        #     }
+        max_call_duration = 300
+        user_settings = await SuperAdminSetting.filter(user=user).first()   
+        default_setting = await DefaultSettings.first()
+
+        if user_settings:
+               max_call_duration = user_settings.max_call_duration
+        else:
+            max_call_duration = default_setting.max_call_duration
+        print("max_call_duration",max_call_duration)
+        low_balance_for_call = minimum_balance_for_call(max_call_duration)  
+        print("low_balance_for_call",low_balance_for_call)  
+        balance = await balance_count(user.id)
+        if balance < low_balance_for_call:
+            print("Insufficient balance, skipping...")
+            return {"success" : False, "detail": "Insufficient balance. Can't Call"}   
+
+        payment_method = await has_payment_method(user)
+        if not payment_method:
+           return {
+                "success":False,
+                "detail": f"Unable to make a call. You should have an active payment method first.",
+            }
         timezone = pytz.timezone("America/Los_Angeles")  
 
         call_limit = 30
@@ -798,12 +906,11 @@ async def assistant_call(
         # setting = await VVadminSetting.filter(user=user).first()
         # defaultSetting = await DefaultSettings.filter().first()
 
-        # if setting:
-        #     print("max time limit is ",setting.max_calls)
-        #     call_limit = setting.max_calls
-        # else:
-        #     call_limit = defaultSetting.max_calls
-
+        if user_settings:
+            call_limit = user_settings.max_calls
+        else:
+            call_limit = default_setting.max_calls
+        print("call_limit",call_limit)
 
         today = datetime.now(timezone).date()
         tomorrow = today + timedelta(days=1)
@@ -816,12 +923,12 @@ async def assistant_call(
             call_started_at__gte=today_start,
             call_started_at__lt=tomorrow_end
         ).count()
-
-        # if calls_count >= call_limit if setting else defaultSetting.max_calls:
-        #     return {
-        #         "success": False,
-        #         "detail": "Daily call limit exceeded."
-        #     }
+        print("calls_count", calls_count)
+        if calls_count >= call_limit:
+            return {
+                "success": False,
+                "detail": "Daily call limit exceeded."
+            }
        
 
 
@@ -859,7 +966,7 @@ async def assistant_call(
         # phone_uuid = result['vapi_phone_uuid'] if result and result['vapi_phone_uuid'] is not None else assistant.vapi_phone_uuid
 
 
-        call_max_duration = 150  
+         
 
         # if setting:
         #     call_max_duration = setting.max_call_duration if setting.max_call_duration is not None else (defaultSetting.max_call_duration if defaultSetting and defaultSetting.max_call_duration is not None else 150)
@@ -867,7 +974,7 @@ async def assistant_call(
         #     call_max_duration = defaultSetting.max_call_duration if defaultSetting and defaultSetting.max_call_duration is not None else 150
 
         # Ensure minimum duration of 150 seconds
-        call_max_duration = call_max_duration if call_max_duration > 150 else 150
+        call_max_duration = max_call_duration if max_call_duration > 150 else 150
         print(f"the max call duration is {call_max_duration}")
         
         custom_field_01 = None
@@ -928,17 +1035,17 @@ async def assistant_call(
             if not call_id:
                 raise HTTPException(status_code=400, detail="No callId found in the VAPI response.")
 
-            new_call_log = CallLog(
-                user=user,
-                call_id=call_id,
-                call_started_at=started_at,
-                customer_name=customer_name,
-                customer_number=customer_number,
-                lead_id=lead_id
-            )
-            await new_call_log.save()
+            # new_call_log = CallLog(
+            #     user=user,
+            #     call_id=call_id,
+            #     call_started_at=started_at,
+            #     customer_name=customer_name,
+            #     customer_number=customer_number,
+            #     lead_id=lead_id
+            # )
+            # await new_call_log.save()
 
-            background_tasks.add_task(get_call_details, call_id=call_id, delay=call_max_duration+60 , lead_id = lead_id , user_id =user.id)
+            # background_tasks.add_task(get_call_details, call_id=call_id, delay=call_max_duration+60 , lead_id = lead_id , user_id =user.id)
 
             return {
                 "success": True,
@@ -1108,16 +1215,16 @@ async def assistant_call(
             if not call_id:
                 raise HTTPException(status_code=400, detail="No callId found in the VAPI response.")
 
-            new_call_log = CallLog(
-                user=main_admin,
-                call_id=call_id,
-                call_started_at=started_at,
-                customer_name=customer_name,
-                customer_number=customer_number,
-            )
-            await new_call_log.save()
+            # new_call_log = CallLog(
+            #     user=main_admin,
+            #     call_id=call_id,
+            #     call_started_at=started_at,
+            #     customer_name=customer_name,
+            #     customer_number=customer_number,
+            # )
+            # await new_call_log.save()
 
-            background_tasks.add_task(get_call_details, call_id=call_id, delay=call_max_duration+60, user_id =user.id)
+            # background_tasks.add_task(get_call_details, call_id=call_id, delay=call_max_duration+60, user_id =user.id)
             # await Demo.create(
             #     name= data.first_name,
             #     email= data.email if data.email else None,

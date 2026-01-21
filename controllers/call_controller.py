@@ -1,24 +1,27 @@
 import asyncio
 import os
-from typing import Annotated, List, Optional
+from typing import Annotated, Optional
 from fastapi import APIRouter, Depends,HTTPException
 import httpx
+from helpers.email import send_dnc_email
 from helpers.jwt_token import get_admin, get_current_user
 # from helpers.send_email import send_dnc_email
 from helpers.vapi_helper import generate_token, get_headers
 from models.call_log import CallLog
 # from models.timeLimit import TimeLimit
-# from models.defaultSettings import DefaultSettings
-# from models.dnc import Dnc
+from models.defaultSettings import DefaultSettings
+from models.dnc import Dnc
+from models.dnc import Dnc
 from models.lead import Lead
-# from models.spent import Spent
+from models.purchased_number import PurchasedNumber
+from models.spent import Spent
 from models.user import User
 from datetime import datetime
-# from langchain_core.prompts import ChatPromptTemplate
-# from langchain_openai import ChatOpenAI
-# from langchain_core.output_parsers import StrOutputParser
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_openai import ChatOpenAI
+from langchain_core.output_parsers import StrOutputParser
 from tortoise.expressions import Q
-# from models.vv_adminSetting import VVadminSetting
+from models.super_admin_setting import SuperAdminSetting
 import asyncio
 from datetime import datetime
 from typing import Optional
@@ -32,7 +35,22 @@ token = generate_token()
    
 @calllogs_router.get("/all_call_logs")
 async def get_logs(user: Annotated[User, Depends(get_admin)]):
-    return await CallLog.all()
+    logs = await CallLog.all().select_related("user")
+
+    return [
+        {
+            "plateform_user_name": log.user.name if log.user else None,
+            "plateform_user_email": log.user.email if log.user else None,
+            "call_id": log.call_id,
+            "call_started_at": log.call_started_at,
+            "customer_number": log.customer_number,
+            "cost": log.cost,
+            "call_ended_at": log.call_ended_at,
+            "status": log.status,
+        }
+        for log in logs
+    ]
+
     
 @calllogs_router.get("/user/call-logs") 
 async def get_user_call_logs(user: Annotated[User, Depends(get_current_user)]):
@@ -150,21 +168,21 @@ async def get_call(call_id: str,user: Annotated[User, Depends(get_current_user)]
             },
             # "successEvalution": success_evalution
         }
-        # call = await CallLog.get_or_none(call_id = call_id)
+        call = await CallLog.get_or_none(call_id = call_id)
         # # time_left = await TimeLimit.filter(user=user).first()
-        # if call:
-        #      call.call_ended_reason = call_data.get("endedReason", "Unknown")
-        #      call.cost = call_data.get("cost", 0)
-        #      call.status = call_data.get("status", "Unknown")
-        #      call.call_duration = call_duration
-        #      await call.save()
-        # else:
-        #     await CallLog.create(
-        #      call_id=call_id,
-        #      call_ended_reason=call_data.get("endedReason", "Unknown"),
-        #      cost=call_data.get("cost", 0),
-        #      status=call_data.get("status", "Unknown"),
-        #  )
+        if call:
+             call.call_ended_reason = call_data.get("endedReason", "Unknown")
+             call.cost = call_data.get("cost", 0)
+             call.status = call_data.get("status", "Unknown")
+             call.call_duration = call_duration
+             await call.save()
+        else:
+            await CallLog.create(
+             call_id=call_id,
+             call_ended_reason=call_data.get("endedReason", "Unknown"),
+             cost=call_data.get("cost", 0),
+             status=call_data.get("status", "Unknown"),
+         )
         
         # time_left.seconds = time_left.seconds - call_duration
         # await time_left.save()
@@ -281,7 +299,7 @@ async def get_call_details(call_id: str, delay: int ,user_id :int, lead_id : Opt
         user = await User.filter(id=user_id).first()
         
         # is_transferred = False
-        # dnc = False
+        dnc = False
         
         # try:
         #     transfer_result = await analyze_call_transfer(transcript)
@@ -291,40 +309,25 @@ async def get_call_details(call_id: str, delay: int ,user_id :int, lead_id : Opt
         #     print(f"Error in analyze_call_transfer but continue to save other call logs: {str(e)}")
         #     is_transferred = False
         
-        # try:
-        #     # dnc_prompts = await Dnc.all()
-        #     prmpt_list = [dnc.prompt for dnc in dnc_prompts]
-        #     dnc_result = await analyze_dnc(transcript, prmpt_list)
-        #     dnc = dnc_result.get("dnc_detected", False)
-        #     print(f"is requested for DNC: {dnc}")
-        # except Exception as e:
-        #     print(f"Error in analyze_dnc but continue to save other call logs: {str(e)}")
-        #     dnc = False
+        try:
+            dnc_prompts = await Dnc.all()
+            prmpt_list = [dnc.prompt for dnc in dnc_prompts]
+            dnc_result = await analyze_dnc(transcript, prmpt_list)
+            dnc = dnc_result.get("dnc_detected", False)
+            print(f"is requested for DNC: {dnc}")
+        except Exception as e:
+            print(f"Error in analyze_dnc but continue to save other call logs: {str(e)}")
+            dnc = False
         
 
         lead = await Lead.filter(id=lead_id).first()
-        # if lead:
-        #     if dnc:
-        #        send_dnc_email(main_admin.email, lead.email, lead.first_name, lead.last_name)
-        #        lead.dnc = dnc
-        #        await lead.save()
+        if lead:
+            if dnc:
+               send_dnc_email(user.email, lead.email, lead.first_name, lead.last_name)
+               lead.dnc = dnc
+               await lead.save()
 
-        # if is_transferred:
-        #     transfer_rate = 0
-            
-        #     user_setting = await VVadminSetting.filter(user=main_admin).first()
-            
-        #     if user_setting:
-        #         transfer_rate = user_setting.transfer_rate
-        #     else:
-        #         defaultSettings = await DefaultSettings.first()
-        #         transfer_rate = defaultSettings.transfer_rate
-            
-        #     await Spent.create(
-        #         user=main_admin,
-        #         spent_money=transfer_rate,  
-        #         description="Transferred a call"
-        #     )
+        
         is_transferred = True
         call_duration = None
         if started_at and ended_at:
@@ -332,6 +335,24 @@ async def get_call_details(call_id: str, delay: int ,user_id :int, lead_id : Opt
             end_time = datetime.fromisoformat(ended_at.replace("Z", "+00:00"))
             call_duration = (end_time - start_time).total_seconds()
 
+        if is_transferred:
+            transfer_rate = 0
+            
+            user_setting = await SuperAdminSetting.filter(user=user).first()
+            
+            if user_setting:
+                transfer_rate = user_setting.transfer_rate
+            else:
+                defaultSettings = await DefaultSettings.first()
+                transfer_rate = defaultSettings.transfer_rate
+            
+            call_cost = (call_duration / 60) * transfer_rate if call_duration > 0 else 0
+            if call_cost > 0:
+                await Spent.create(
+                    user=user,
+                    spent_money=call_cost,  
+                    description="Transferred a call"
+                )
         call = await CallLog.get_or_none(call_id=call_id)
         # time_left= await TimeLimit.get_or_none(user_id=user_id)
         print("updaing call logs")
@@ -424,31 +445,31 @@ async def get_call_detail(call_id: str, delay: int, user_id: int, lead_id: Optio
         
         # Analyze DNC with error handling
         dnc = False
-        # try:
-        #     dnc_prompts = await Dnc.all()
-        #     if dnc_prompts:
-        #         prmpt_list = [dnc.prompt for dnc in dnc_prompts]
-        #         if transcript and transcript != "No transcript available":
-        #             dnc = await analyze_dnc(transcript, prmpt_list)
-        #             print(f"DNC analysis completed: {dnc}")
-        # except Exception as e:
-        #     print(f"DNC analysis failed: {str(e)}")
-        #     # Continue with default value
+        try:
+            dnc_prompts = await Dnc.all()
+            if dnc_prompts:
+                prmpt_list = [dnc.prompt for dnc in dnc_prompts]
+                if transcript and transcript != "No transcript available":
+                    dnc = await analyze_dnc(transcript, prmpt_list)
+                    print(f"DNC analysis completed: {dnc}")
+        except Exception as e:
+            print(f"DNC analysis failed: {str(e)}")
+            # Continue with default value
         
         # Update lead with DNC status
-        # if lead_id and dnc:
-        #     try:
-        #         lead = await Lead.filter(id=lead_id).first()
-        #         if lead:
-        #             send_dnc_email(main_admin.email, lead.email, lead.first_name, lead.last_name)
-        #             lead.dnc = dnc
-        #             await lead.save()
-        #             print(f"Lead {lead_id} updated with DNC status")
-        #     except Exception as e:
-        #         print(f"Failed to update lead DNC status: {str(e)}")
+        if lead_id and dnc:
+            try:
+                lead = await Lead.filter(id=lead_id).first()
+                if lead:
+                    send_dnc_email(user.email, lead.email, lead.first_name, lead.last_name)
+                    lead.dnc = dnc
+                    await lead.save()
+                    print(f"Lead {lead_id} updated with DNC status")
+            except Exception as e:
+                print(f"Failed to update lead DNC status: {str(e)}")
         
         # Handle transfer charges
-        is_transferred = transfer_result.get("isTransferred", False)
+        # is_transferred = transfer_result.get("isTransferred", False)
         # if is_transferred:
         #     try:
         #         transfer_rate = 0
@@ -481,7 +502,28 @@ async def get_call_detail(call_id: str, delay: int, user_id: int, lead_id: Optio
                 print(f"Call duration calculated: {call_duration} seconds")
             except Exception as e:
                 print(f"Failed to calculate call duration: {str(e)}")
-        
+        is_transferred = True
+        if is_transferred:
+            try:
+                transfer_rate = 0
+                user_setting = await SuperAdminSetting.filter(user=user).first()
+                
+                if user_setting and user_setting.transfer_rate:
+                    transfer_rate = user_setting.transfer_rate
+                else:
+                    default_settings = await DefaultSettings.first()
+                    if default_settings:
+                        transfer_rate = default_settings.transfer_rate
+                call_cost = (call_duration / 60) * transfer_rate if call_duration > 0 else 0
+                if call_cost > 0:
+                    await Spent.create(
+                        user=user,
+                        spent_money=transfer_rate,
+                        description="Transferred a call"
+                    )
+                    print(f"Transfer charge applied: ${transfer_rate}")
+            except Exception as e:
+                print(f"Failed to apply transfer charges: {str(e)}")
         # Update call log and time limit
         try:
             call = await CallLog.get_or_none(call_id=call_id)
@@ -582,34 +624,193 @@ def create_background_task(call_id: str, delay: int, user_id: int, lead_id: Opti
     
 #     return {"isTransferred": is_transferred == "True"}
 
-# async def analyze_dnc(transcript: str, dnc_prompts: list) -> dict:
-#     dnc_prompts_str = [str(dnc) for dnc in dnc_prompts] 
-#     prompt = f"""
-#     You are analyzing a call transcript to check if the user expressed any intention to be added to the "Do Not Call" (DNC) list.
-#     Below is a list of DNC-related prompts:
-#     {', '.join(dnc_prompts_str)}
+async def analyze_dnc(transcript: str, dnc_prompts: list) -> dict:
+    dnc_prompts_str = [str(dnc) for dnc in dnc_prompts] 
+    prompt = f"""
+    You are analyzing a call transcript to check if the user expressed any intention to be added to the "Do Not Call" (DNC) list.
+    Below is a list of DNC-related prompts:
+    {', '.join(dnc_prompts_str)}
 
-#     Analyze the following transcript and determine if the user's intent matches any of the above DNC prompts or if their intent is related to the DNC list.
+    Analyze the following transcript and determine if the user's intent matches any of the above DNC prompts or if their intent is related to the DNC list.
 
-#     Provide your response in True or False only.
+    Provide your response in True or False only.
 
-#     Transcript:
-#     {transcript}
-#     """
+    Transcript:
+    {transcript}
+    """
 
-#     model = ChatOpenAI(model="gpt-4o-mini", temperature=0.2)
-#     output_parser = StrOutputParser()
+    model = ChatOpenAI(model="gpt-4o-mini", temperature=0.2)
+    output_parser = StrOutputParser()
 
-#     prompt_template = ChatPromptTemplate.from_template(prompt)
-#     chain = prompt_template | model | output_parser
+    prompt_template = ChatPromptTemplate.from_template(prompt)
+    chain = prompt_template | model | output_parser
 
-#     result = await chain.ainvoke({"transcript": transcript})
+    result = await chain.ainvoke({"transcript": transcript})
 
-#     if result.strip().lower() == "true":
-#         return {"dnc_detected": True}
-#     elif result.strip().lower() == "false":
-#         return {"dnc_detected": False}
-#     else:
-#         return {"error": f"Unexpected model response: {result}"}
+    if result.strip().lower() == "true":
+        return {"dnc_detected": True}
+    elif result.strip().lower() == "false":
+        return {"dnc_detected": False}
+    else:
+        return {"error": f"Unexpected model response: {result}"}
     
     
+
+
+
+
+
+async def handle_end_of_call_report(payload):
+    """Handle end-of-call-report and save to CallLog"""
+    try:
+        print("\n========== END OF CALL REPORT RECEIVED ==========")
+
+
+        message = payload.get("message", {})
+
+        call_data = message.get("call", {})
+
+        # Extract call information
+        vapi_call_id = call_data.get("id")
+        call_type = call_data.get("type", "inbound")
+        started_at = call_data.get("startedAt")
+        ended_at = call_data.get("endedAt")
+
+        ended_reason = message.get("endedReason")
+        call_duration_seconds = message.get("durationSeconds")
+        call_started_at = message.get("startedAt")
+        call_ended_at = message.get("endedAt")
+
+
+        cost = message.get("cost", 0.0)
+
+        print("\nCALL META:")
+        print("Vapi Call ID:", vapi_call_id)
+        print("Call Type:", call_type)
+        print("Started At:", started_at)
+        print("Ended At:", ended_at)
+        print("Ended Reason:", ended_reason)
+        print("Cost:", cost)
+
+        # ✅ Correct number extraction (VERY IMPORTANT)
+        customer_number = call_data.get("customer", {}).get("number")
+        called_number = message.get("phoneNumber", {}).get("number")
+
+        lead_number = None
+        lead_name  = None
+        lead_id = None
+        print("customer_number",customer_number)
+        if customer_number:
+            lead = await Lead.filter(mobile=customer_number).first()
+            if lead:
+               lead_name = f"{lead.first_name}  {lead.last_name}"
+               lead_number = lead.mobile 
+               lead_id = lead.id
+               
+        print("lead_name",lead_name)
+        
+        print("\nPHONE NUMBERS:")
+        print("Caller (customer) number:", customer_number)  # ends 675
+        print("Called (Twilio) number:", called_number)      # ends 125
+
+        # Calculate duration
+        # call_duration = None
+        # call_started_at = None
+        # call_ended_at = None
+
+        # if started_at and ended_at:
+        #     try:
+        #         start_time = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+        #         end_time = datetime.fromisoformat(ended_at.replace("Z", "+00:00"))
+
+        #         call_duration = (end_time - start_time).total_seconds()
+        #         call_started_at = start_time
+        #         call_ended_at = end_time
+
+        #         print("\nCALL TIMING:")
+        #         print("Duration (seconds):", call_duration)
+
+        #     except ValueError as e:
+        #         print("TIME PARSE ERROR:", e)
+        #         return {"error": f"Start and end time issue: {e}"}
+
+        # Find user by called number
+        user = None
+        if called_number:
+            try:
+                print("\nLOOKING UP USER FOR NUMBER:", called_number)
+                purchased_num = await PurchasedNumber.filter(phone_number=called_number).first()
+
+                if purchased_num:
+                    user = await User.filter(id=purchased_num.user_id).first()
+                    print("USER FOUND:", user)
+                else:
+                    print("NO PURCHASED NUMBER FOUND")
+
+            except Exception as e:
+                print("USER LOOKUP ERROR:", e)
+                return {"error": f"Unable to find user: {e}"}
+
+        # Analysis data
+        analysis = message.get("analysis", {})
+        structured_data = analysis.get("structuredData", {})
+
+        print("\nANALYSIS:")
+        print(analysis)
+
+        customer_name = None
+        if isinstance(structured_data, dict):
+            customer_name = (
+                structured_data.get("customerName")
+                or structured_data.get("customer_name")
+                or structured_data.get("name")
+            )
+
+        print("Customer Name:", customer_name)
+
+        # Transfer detection
+        is_transferred = "transfer" in str(message).lower()
+        print("Was Call Transferred:", is_transferred)
+
+        # Success evaluation
+        criteria_satisfied = False
+        # success_evaluation = analysis.get("successEvaluation", {})
+
+        # if success_evaluation:
+        #     score = success_evaluation.get("score", 0)
+        #     criteria_satisfied = score >= 7
+
+        # print("Criteria Satisfied:", criteria_satisfied)
+
+        # Create CallLog entry
+        call_log_data = {
+            "vapi_id": vapi_call_id,
+            "call_id":vapi_call_id,
+            "call_type": call_type,
+            "user": user,
+            "customer_name": lead_name if lead_name else customer_name,
+            "lead_id" : lead_id,
+            "call_started_at": call_started_at,
+            "call_ended_at": call_ended_at,
+            "call_ended_reason": ended_reason,
+            "call_duration": call_duration_seconds,
+            "customer_number": customer_number,
+            "cost": cost,
+            "is_transferred": is_transferred,
+            "status": "completed",
+            "criteria_satisfied": criteria_satisfied
+        }
+
+        call_log_data = {k: v for k, v in call_log_data.items() if v is not None}
+
+        print("\nFINAL CALL LOG DATA (SAVING):")
+        print(call_log_data)
+
+        await CallLog.create(**call_log_data)
+
+        print("✅ CALL LOG SAVED SUCCESSFULLY")
+        print("===============================================\n")
+
+    except Exception as e:
+        print("❌ ERROR SAVING CALL LOG:", e)
+        return {"error": f"Unable to save the call logs: {e}"}

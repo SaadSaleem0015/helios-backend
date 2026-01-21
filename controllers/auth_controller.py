@@ -7,6 +7,7 @@ from models.user import User
 from models.code import Code
 from helpers.jwt_token import generate_user_token, get_admin, get_current_user
 from helpers.email import generate_code
+from helpers.criteria_check import balance_count
 import pytz
 
 
@@ -291,11 +292,12 @@ async def update_profile(data: UpdateProfilePayload,user:Annotated[User,Depends(
 
 @auth_router.get("/profile")
 async def get_profile(user:Annotated[User,Depends(get_current_user)]):
+    balance = await balance_count(user.id)
     return {
-      
             "name": user.name,
             "email": user.email,
             "type":user.type,
+            "balance": balance if balance else 0,
             "created_at":user.created_at,
     
     }

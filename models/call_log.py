@@ -5,7 +5,7 @@ class CallLog(Model):
     id = fields.IntField(primary_key=True)
     call_id =  fields.CharField(max_length=1000, null=True)
     vapi_id = fields.CharField(max_length=500, null=True)
-
+    call_type = fields.CharField(max_length=500, null=True)
     lead_id=fields.IntField(max_length=255 , null=True)
     user=fields.ForeignKeyField("models.User", related_name="call_log") 
     call_started_at = fields.DatetimeField(null=True)

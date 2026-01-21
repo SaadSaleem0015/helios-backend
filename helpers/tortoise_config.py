@@ -38,6 +38,12 @@ TORTOISE_CONFIG = {
                 "models.lead_status",
                 "models.termsandconditions",
                 "models.zoho_crm",
+                "models.close_crm",
+                "models.hubspot_crm",
+
+                "models.dnc",
+
+                "models.auto_replenishment",
                 "aerich.models"
             ]
         }
@@ -52,3 +58,7 @@ async def lifespan(_):
         yield
     finally:
         await Tortoise.close_connections()
+
+async def init_tortoise():
+    await Tortoise.init(config=TORTOISE_CONFIG)
+    await Tortoise.generate_schemas()

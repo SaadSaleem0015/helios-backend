@@ -10,6 +10,7 @@ class File(Model):
     id = fields.IntField(primary_key=True)
     alphanumeric_id = fields.CharField(8, unique=True, null=True)  
     name = fields.CharField(255)
+    type = fields.CharField(8, unique=True, null=True) 
     user = fields.ForeignKeyField("models.User")
     leads: fields.ReverseRelation['Lead']
     # url = fields.TextField(null=True)

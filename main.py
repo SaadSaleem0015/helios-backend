@@ -5,7 +5,9 @@ from controllers.admin_controller import admin_router
 from controllers.assistant_controller import assistant_router
 from controllers.call_controller import calllogs_router
 from controllers.defaultSettings_controller import default_settings_router
+from controllers.dnc_controller import dnc_router
 from controllers.documents_controller import kb_router
+from controllers.hubspot_controller import hubspot_router
 from controllers.schedule_call_controller import schedule_router
 from controllers.terms_conditons_controller import terms_router
 from controllers.twilio_controller import twilio_router
@@ -49,6 +51,9 @@ app.include_router(admin_router, prefix = "/api" , tags = {"Admin"})
 app.include_router(terms_router, prefix = "/api" , tags = {"Terms "})
 app.include_router(default_settings_router, prefix = "/api" , tags = {"Defualt Settings "})
 app.include_router(crm_router, prefix='/api', tags=['CRM Integration'])
+app.include_router(dnc_router, prefix='/api', tags=['DNC'])
+app.include_router(hubspot_router, prefix='/api/crm', tags=['Hubspot'])
+
 
 
 

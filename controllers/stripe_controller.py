@@ -7,6 +7,7 @@ from models.payment import Payment
 from models.paymentMethod import PaymentMethod
 from models.spent import Spent
 from models.user import User
+from models.auto_replenishment import AutoReplenishment
 from typing import Annotated
 import os
 # from models.businessPlan import BusinessPlan
@@ -37,7 +38,6 @@ class PaymentRequest(BaseModel):
 class makePayment(BaseModel):
     amount : int | float
     paymentMethodId: int
-    autoReplenishment : bool
 
 
 @stripe_router.get("/payments")
@@ -243,12 +243,17 @@ async def makePayment(data: makePayment , user:Annotated[User, Depends(get_curre
                 name = user.name
             )
         idempotency_key = str(uuid.uuid4())
+        auto = False
+        autoReplenishment = await AutoReplenishment.filter(user=user).first()
+        if autoReplenishment:
+           auto= autoReplenishment.replenishment
+
         payment_intent = stripe.PaymentIntent.create(
             amount = int(data.amount * 100) ,
             currency = "usd",
             customer=customer["id"],
             payment_method = primaryMethod.payment_method_id,
-            off_session=data.autoReplenishment,
+            off_session=data.auto,
             confirm = True,
             automatic_payment_methods={
            'enabled': True,
@@ -261,7 +266,7 @@ async def makePayment(data: makePayment , user:Annotated[User, Depends(get_curre
                 user=user,
                 amount_paid=payment_intent["amount"] / 100, 
                 amount_received=payment_intent["amount_received"] / 100,
-                auto_replenishment = data.autoReplenishment,
+                auto_replenishment = auto,
                 token=payment_intent["id"],  
             )
             # second_price = await SuperAdminSetting.filter(user=user).first()
@@ -545,3 +550,30 @@ async def process_payment(payment_data: dict, user: User):
 async def spentmoney(user: Annotated[User, Depends(get_current_user)]):
     spent_money = await Spent.filter(user_id = user.id).all()
     return spent_money
+
+
+@stripe_router.post("/toggle-replenishment")
+async def toggle_replenishment(current_user: Annotated[User, Depends(get_current_user)]):
+    replenishment_obj = await AutoReplenishment.get_or_none(user=current_user)
+    
+    if not replenishment_obj:
+        replenishment_obj = await AutoReplenishment.create(user=current_user, replenishment=True)
+        return {"message": "Replenishment enabled for the user.", "replenishment": True}
+    
+    # Toggle the boolean
+    replenishment_obj.replenishment = not replenishment_obj.replenishment
+    await replenishment_obj.save()
+    
+    status = "enabled" if replenishment_obj.replenishment else "disabled"
+                
+    return {"success": True, "detail": f"Replenishment {status}"}
+
+@stripe_router.get("/replenishment-status")
+async def replenishment_status(current_user: Annotated[User, Depends(get_current_user)]):
+    replenishment_obj = await AutoReplenishment.get_or_none(user=current_user)
+    
+    if not replenishment_obj:
+        return {"success": True, "replenishment": False, "detail": "Replenishment is disabled."}
+    
+    status = "enabled" if replenishment_obj.replenishment else "disabled"
+    return {"success": True, "replenishment": replenishment_obj.replenishment, "detail": f"Replenishment is {status}."}

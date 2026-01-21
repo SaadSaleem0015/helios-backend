@@ -330,3 +330,84 @@ def send_reset_email(to_email: str, code: Union[str, int]):
     subject = "Confirm Email to Reset Password"
     return send_email(to_email, subject, message_html)
 
+
+def send_dnc_email(to_email: str, lead_email: str, lead_first_name: str, lead_last_name: str):
+    message_html = f"""
+    <html>
+      <head>
+        <style>
+          body {{
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 0;
+            color: #333;
+          }}
+          .container {{
+            width: 100%;
+            max-width: 600px;
+            margin: 30px auto;
+            padding: 20px;
+            background-color: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+          }}
+          h1 {{
+            font-size: 24px;
+            color: #d9534f;
+            margin-bottom: 20px;
+            text-align: center;
+          }}
+          p {{
+            font-size: 16px;
+            line-height: 1.6;
+            color: #555;
+            margin-bottom: 15px;
+          }}
+          .lead-details {{
+            margin: 20px 0;
+            padding: 15px;
+            background-color: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+          }}
+          .lead-details p {{
+            margin: 5px 0;
+          }}
+          .footer {{
+            margin-top: 30px;
+            font-size: 14px;
+            color: #aaa;
+            text-align: center;
+          }}
+          .footer a {{
+            color: #0077b6;
+            text-decoration: none;
+          }}
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <h1>Important: Lead Marked as DNC</h1>
+          <p>Dear Admin,</p>
+          <p>We are writing to inform you that the following lead has been marked as <strong>Do Not Call (DNC)</strong> in our system:</p>
+          
+          <div class="lead-details">
+            <p><strong>First Name:</strong> {lead_first_name}</p>
+            <p><strong>Last Name:</strong> {lead_last_name}</p>
+            <p><strong>Email:</strong> {lead_email}</p>
+          </div>
+          
+          <p>Please ensure that no further contact is made with this lead to comply with the applicable regulations and company policy.</p>
+          
+          <div class="footer">
+            <p>Best regards,</p>
+            <p>The phono ai AI Team</p>
+            <p><a href="http://vanillavoice.ai">Visit Our Website</a></p>
+          </div>
+        </div>
+      </body>
+    </html>
+    """
+    
+    return send_email(to_email, "Lead Marked as DNC Notification", message_html)
