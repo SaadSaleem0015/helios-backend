@@ -379,7 +379,7 @@ async def get_purchased_numbers(user: Annotated[User, Depends(get_admin)]):
     purchased_numbers = await PurchasedNumber.all().prefetch_related("user")  # Prefetching company data
 
     if not purchased_numbers:
-        return {"success": False, "detail": "No purchased numbers found."}
+        return []
 
     return [
         {
