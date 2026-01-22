@@ -21,6 +21,7 @@ HUBSPOT_TOKEN_URL = "https://api.hubapi.com/oauth/v1/token"
 HUBSPOT_API_BASE = "https://api.hubapi.com"
 domain = os.getenv("DOMAIN")
 REDIRECT_URI = f"{domain}/api/crm/callback/hubspot"  
+print(REDIRECT_URI)
 # HUBSPOT_CLIENT_ID = "bc1d6fda-e7fd-413a-8c01-4c0b9ce04735"
 # HUBSPOT_CLIENT_SECRET = "eea9d800-63cd-4d12-8092-586ef8be21a1"
 HUBSPOT_CLIENT_ID = "5d4a3c46-a131-4341-9ebe-40d91bea0398"
