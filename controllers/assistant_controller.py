@@ -1176,7 +1176,7 @@ async def assistant_call(
         
         
         payload = {
-            "name": "From phono ai",
+            "name": "From The Helios Ai",
             "assistantId": vapi_assis_id,
             "customer": {
                 "numberE164CheckEnabled": True,

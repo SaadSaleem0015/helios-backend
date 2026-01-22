@@ -40,41 +40,34 @@ async def generate_code(type: Literal["password_reset", "account_activation"], u
         raise HTTPException(status_code=500, detail=f"Failed to generate code: {e}")
     
 def send_email(to_address: str, subject: str, message_html: str):
-    user = os.getenv("SMTP_FROM_USER")
+    user = os.getenv("SMTP_FROM_USER")  # Sirf name (Helios AI)
     smtp_server = os.getenv("SMTP_SERVER")
     smtp_port_str = os.getenv("SMTP_PORT")
-    from_address = os.getenv("SMTP_FROM_ADDRESS")
-    password = os.getenv('SMTP_PASSWORD')
+    from_address = os.getenv("SMTP_FROM_ADDRESS")  # full email
+    password = os.getenv("SMTP_PASSWORD")
 
     if not all([user, smtp_server, smtp_port_str, from_address, password]):
-        raise ValueError("SMTP configuration is not set properly in environment variables.")
+        raise ValueError("SMTP configuration is not set properly.")
 
-    assert user is not None
-    assert smtp_server is not None
-    assert smtp_port_str is not None
-    assert from_address is not None
-    assert password is not None
     smtp_port = int(smtp_port_str)
+
     message = MIMEMultipart()
     message["From"] = f'"{user}" <{from_address}>'
     message["To"] = to_address
     message["Subject"] = subject
-    html = message_html
-    message.attach(MIMEText(html, "html"))
+    message.attach(MIMEText(message_html, "html"))
 
     try:
-        print(f"smtp_port: {smtp_port}")
-        print(f"smtp_server : {smtp_server}")
-        print(f"from_address: {from_address}")
-        print("user: ", user)
-        with smtplib.SMTP_SSL(smtp_server, smtp_port) as server:
+        with smtplib.SMTP(smtp_server, smtp_port) as server:
+            server.ehlo()
+            server.starttls()   # 🔑 THIS IS IMPORTANT
+            server.ehlo()
             server.login(from_address, password)
             server.send_message(message)
             return True
     except Exception as e:
         print(f"Failed to send email: {e}")
         return False
-  
 
 
 
@@ -104,7 +97,7 @@ def send_confirmation_email(to_email: str, code: Union[str, int]):
                 box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
             }}
             .header {{
-                background-color: #2752D8;
+                background-color: #a4c2dc;
                 padding: 20px;
                 text-align: center;
             }}
@@ -116,7 +109,7 @@ def send_confirmation_email(to_email: str, code: Union[str, int]):
                 color: #333333;
             }}
             .body h1 {{
-                color: #2752D8;
+                color: #a4c2dc;
                 margin-bottom: 20px;
                 font-size: 24px;
             }}
@@ -125,21 +118,21 @@ def send_confirmation_email(to_email: str, code: Union[str, int]):
                 font-size: 16px;
             }}
             .code-box {{
-                background-color: #f0f4ff;
-                border-left: 4px solid #2752D8;
+                background-color: #c6d9ea;
+                border-left: 4px solid #a4c2dc;
                 padding: 15px;
                 margin: 20px 0;
                 font-size: 18px;
                 font-weight: bold;
                 text-align: center;
                 letter-spacing: 2px;
-                color: #152B72;
+                color: #a4c2dc;
                 border-radius: 4px;
             }}
             .button {{
                 display: inline-block;
                 padding: 12px 25px;
-                background-color: #2752D8;
+                background-color: #a4c2dc;
                 color: #ffffff;
                 text-decoration: none;
                 border-radius: 5px;
@@ -147,7 +140,7 @@ def send_confirmation_email(to_email: str, code: Union[str, int]):
                 transition: background-color 0.3s ease;
             }}
             .button:hover {{
-                background-color: #1f3a99;
+                background-color: #8fb0d0;
             }}
             .footer {{
                 background-color: #f4f4f4;
@@ -157,7 +150,7 @@ def send_confirmation_email(to_email: str, code: Union[str, int]):
                 color: #777777;
             }}
             .footer a {{
-                color: #2752D8;
+                color: #a4c2dc;
                 text-decoration: none;
             }}
             @media only screen and (max-width: 600px) {{
@@ -179,13 +172,13 @@ def send_confirmation_email(to_email: str, code: Union[str, int]):
             <!-- Body Section -->
             <div class="body">
                 <h1>Hello,</h1>
-                <p>Please Enter the following verification code to log into Legal AI</p>
+                <p>Please Enter the following verification code to log into The Helios Ai</p>
                 <div class="code-box">
                     {code}
                 </div>                
                 <p>If you are having any issues with your account, please contact us at
                 <span>
-                support@legal.ai
+                support@helios.ai
                 </span>
                 
                 </p>
@@ -193,7 +186,7 @@ def send_confirmation_email(to_email: str, code: Union[str, int]):
     
             <!-- Footer Section -->
             <div class="footer">
-                <p>&copy; Legal AI. All rights reserved.</p>
+                <p>&copy; The Helios Ai. All rights reserved.</p>
                
             </div>
         </div>
@@ -231,7 +224,7 @@ def send_reset_email(to_email: str, code: Union[str, int]):
                 box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
             }}
             .header {{
-                background-color: #2752D8;
+                background-color: #a4c2dc;
                 padding: 20px;
                 text-align: center;
             }}
@@ -243,7 +236,7 @@ def send_reset_email(to_email: str, code: Union[str, int]):
                 color: #333333;
             }}
             .body h1 {{
-                color: #2752D8;
+                color: #a4c2dc;
                 margin-bottom: 20px;
                 font-size: 24px;
             }}
@@ -252,21 +245,21 @@ def send_reset_email(to_email: str, code: Union[str, int]):
                 font-size: 16px;
             }}
             .code-box {{
-                background-color: #f0f4ff;
-                border-left: 4px solid #2752D8;
+                background-color: #c6d9ea;
+                border-left: 4px solid #a4c2dc;
                 padding: 15px;
                 margin: 20px 0;
                 font-size: 18px;
                 font-weight: bold;
                 text-align: center;
                 letter-spacing: 2px;
-                color: #152B72;
+                color: #a4c2dc;
                 border-radius: 4px;
             }}
             .button {{
                 display: inline-block;
                 padding: 12px 25px;
-                background-color: #2752D8;
+                background-color: #a4c2dc;
                 color: #ffffff;
                 text-decoration: none;
                 border-radius: 5px;
@@ -274,7 +267,7 @@ def send_reset_email(to_email: str, code: Union[str, int]):
                 transition: background-color 0.3s ease;
             }}
             .button:hover {{
-                background-color: #1f3a99;
+                background-color: #8fb0d0;
             }}
             .footer {{
                 background-color: #f4f4f4;
@@ -284,7 +277,7 @@ def send_reset_email(to_email: str, code: Union[str, int]):
                 color: #777777;
             }}
             .footer a {{
-                color: #2752D8;
+                color: #a4c2dc;
                 text-decoration: none;
             }}
             @media only screen and (max-width: 600px) {{
@@ -308,7 +301,7 @@ def send_reset_email(to_email: str, code: Union[str, int]):
             <!-- Body Section -->
             <div class="body">
                 <h1>Hello,</h1>
-                <p>You have requested to reset your password for your <strong>Legal AI</strong> account. Please use the reset code below to proceed:</p>
+                <p>You have requested to reset your password for your <strong>The Helios Ai</strong> account. Please use the reset code below to proceed:</p>
                 
                 <div class="code-box">
                     {code}
@@ -320,7 +313,7 @@ def send_reset_email(to_email: str, code: Union[str, int]):
     
             <!-- Footer Section -->
             <div class="footer">
-                <p>&copy; Legal AI. All rights reserved.</p>
+                <p>&copy; The Helios Ai. All rights reserved.</p>
                 
             </div>
         </div>
@@ -354,7 +347,7 @@ def send_dnc_email(to_email: str, lead_email: str, lead_first_name: str, lead_la
           }}
           h1 {{
             font-size: 24px;
-            color: #d9534f;
+            color: #a4c2dc;
             margin-bottom: 20px;
             text-align: center;
           }}
@@ -381,7 +374,7 @@ def send_dnc_email(to_email: str, lead_email: str, lead_first_name: str, lead_la
             text-align: center;
           }}
           .footer a {{
-            color: #0077b6;
+            color: #a4c2dc;
             text-decoration: none;
           }}
         </style>
@@ -402,8 +395,7 @@ def send_dnc_email(to_email: str, lead_email: str, lead_first_name: str, lead_la
           
           <div class="footer">
             <p>Best regards,</p>
-            <p>The phono ai AI Team</p>
-            <p><a href="http://vanillavoice.ai">Visit Our Website</a></p>
+            <p>The Helios Ai Team</p>
           </div>
         </div>
       </body>
