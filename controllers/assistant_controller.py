@@ -233,7 +233,7 @@ async def create_assistant(assistant: AssistantCreate, user: User = Depends(get_
         balance = await balance_count(user.id)
         if balance < 5:
                 print("Insufficient balance, skipping...")
-                return {"success" : False, "detail": "Insufficient balance. Can't Call"}
+                return {"success" : False, "detail": "Insufficient balance."}
 
         required_fields = [
             'name', 'provider', 'first_message', 'model',
