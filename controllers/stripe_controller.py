@@ -253,7 +253,7 @@ async def makePayment(data: makePayment , user:Annotated[User, Depends(get_curre
             currency = "usd",
             customer=customer["id"],
             payment_method = primaryMethod.payment_method_id,
-            off_session=data.auto,
+            off_session=auto,
             confirm = True,
             automatic_payment_methods={
            'enabled': True,
