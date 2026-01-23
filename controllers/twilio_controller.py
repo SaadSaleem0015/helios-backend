@@ -39,8 +39,9 @@ class PhoneNumberRequest(BaseModel):
     area_codes: List[str]  
 class PurchaseNumberRequest(BaseModel):
     phone_number: List[str]  
-    
-VAPI_WEBHOOK_URL = "https://ff4f88149eb4.ngrok-free.app/api/webhooks/vapi"
+
+domain = os.getenv("DOMAIN")
+VAPI_WEBHOOK_URL = f"{domain}/api/webhooks/vapi"
     
 
 account_sid = os.environ['TWILIO_ACCOUNT_SID']

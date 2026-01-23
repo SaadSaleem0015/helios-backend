@@ -29,7 +29,8 @@ dotenv.load_dotenv()
 assistant_router = APIRouter()
 header = get_headers()
 token = generate_token()
-VAPI_WEBHOOK_URL = "https://ff4f88149eb4.ngrok-free.app/api/webhooks/vapi"
+domain = os.getenv("DOMAIN")
+VAPI_WEBHOOK_URL = f"{domain}/api/webhooks/vapi"
 
 class PhoneCallRequest(BaseModel):
     api_key: str
