@@ -15,9 +15,11 @@ from models.assistant import Assistant
 # from models.defaultSettings import DefaultSettings
 # from models.logs import Logs
 # from models.paymentMethod import PaymentMethod
+from models.defaultSettings import DefaultSettings
 from models.purchased_number import PurchasedNumber
 # from models.spent import Spent
 from models.spent import Spent
+from models.super_admin_setting import SuperAdminSetting
 from models.user import User
 # from models.vv_adminSetting import VVadminSetting
 
@@ -284,9 +286,17 @@ async def purchase_phone_number(request: PurchaseNumberRequest, user: Annotated[
                             iso_country=None,
                         )
                         purchased_numbers.append(purchased_entry.phone_number)
+                number_price = 5
+                # user_setting = await SuperAdminSetting.filter(user=user).first()
+                # if not user_setting:         
+                default_setting = await DefaultSettings.first()
+                if default_setting:
+                    number_price = default_setting.phone_number_price
+                
+                
                 await Spent.create(
                     user=user,
-                    spent_money=user_setting.phone_number_price,
+                    spent_money=number_price,
                     description="Purchased a phone number"
                 )
             # user_setting = await DefaultSettings.first()
