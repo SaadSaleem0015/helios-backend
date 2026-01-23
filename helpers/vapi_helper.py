@@ -31,7 +31,7 @@ async def admin_add_payload(assistant_data):
         {
           "model": "flux-general-en",
           "language": "en",
-          "numerals": false,
+          "numerals": False,
           "provider": "deepgram",
           "confidenceThreshold": 0.4
         }
@@ -218,7 +218,7 @@ async def user_add_payload(assistant_data,user):
         {
           "model": "flux-general-en",
           "language": "en",
-          "numerals": false,
+          "numerals": False,
           "provider": "deepgram",
           "confidenceThreshold": 0.4
         }
@@ -410,7 +410,7 @@ async def assistant_payload(assistant_data):
         {
           "model": "flux-general-en",
           "language": "en",
-          "numerals": false,
+          "numerals": False,
           "provider": "deepgram",
           "confidenceThreshold": 0.4
         }
