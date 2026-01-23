@@ -26,6 +26,17 @@ async def admin_add_payload(assistant_data):
             "provider": assistant_data.transcribe_provider,
             "model": assistant_data.transcribe_model,
             "language": assistant_data.transcribe_language,
+            "fallbackPlan": {
+      "transcribers": [
+        {
+          "model": "flux-general-en",
+          "language": "en",
+          "numerals": false,
+          "provider": "deepgram",
+          "confidenceThreshold": 0.4
+        }
+      ]
+    }
         },
         "model": {
             "messages": [
@@ -202,6 +213,17 @@ async def user_add_payload(assistant_data,user):
             "provider": assistant_data.transcribe_provider,
             "model": assistant_data.transcribe_model,
             "language": assistant_data.transcribe_language,
+            "fallbackPlan": {
+      "transcribers": [
+        {
+          "model": "flux-general-en",
+          "language": "en",
+          "numerals": false,
+          "provider": "deepgram",
+          "confidenceThreshold": 0.4
+        }
+      ]
+    }
         },
         "model": {
             "messages": [
@@ -378,9 +400,22 @@ async def assistant_payload(assistant_data):
         
     user_payload = {
         "transcriber": {
+            
+
             "provider": assistant_data.transcribe_provider,
             "model": assistant_data.transcribe_model,
             "language": assistant_data.transcribe_language,
+            "fallbackPlan": {
+      "transcribers": [
+        {
+          "model": "flux-general-en",
+          "language": "en",
+          "numerals": false,
+          "provider": "deepgram",
+          "confidenceThreshold": 0.4
+        }
+      ]
+    },
         },
         "model": {
             "messages": [
