@@ -41,7 +41,7 @@ class PurchaseNumberRequest(BaseModel):
     phone_number: List[str]  
 
 domain = os.getenv("DOMAIN")
-VAPI_WEBHOOK_URL = f"{domain}/api/webhooks/vapi"
+VAPI_WEBHOOK_URL = f"https://api.theheliosai.com/api/webhooks/vapi"
     
 
 account_sid = os.environ['TWILIO_ACCOUNT_SID']
