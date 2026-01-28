@@ -127,15 +127,15 @@ async def admin_add_payload(assistant_data):
             "listenEnabled": False,
             "controlEnabled": False
         },
-        "voicemailDetection": {
-        "provider": "twilio",
-        "voicemailDetectionTypes": ["machine_end_beep", "machine_end_silence"],
-        "enabled": True,
-        "machineDetectionTimeout": 3,
-        "machineDetectionSpeechThreshold": 1000,
-        "machineDetectionSpeechEndThreshold": 500,
-        "machineDetectionSilenceTimeout": 2000
-        }
+          "voicemailDetection": {
+        "provider": "vapi",
+        "backoffPlan": {
+        "maxRetries": 5,
+        "startAtSeconds": 2,
+        "frequencySeconds": 2.5
+        },
+        "beepMaxAwaitSeconds": 12
+    },
     }
 
     end_call_tool = {
@@ -253,15 +253,15 @@ async def user_add_payload(assistant_data,user):
         "analysisPlan": {
             "summaryPrompt": assistant_data.systemPrompt,
         },
-        "voicemailDetection": {
-        "provider": "twilio",
-        "voicemailDetectionTypes": ["machine_end_beep", "machine_end_silence"],
-        "enabled": True,
-        "machineDetectionTimeout": 3,
-        "machineDetectionSpeechThreshold": 1000,
-        "machineDetectionSpeechEndThreshold": 500,
-        "machineDetectionSilenceTimeout": 2000
-        }
+          "voicemailDetection": {
+    "provider": "vapi",
+    "backoffPlan": {
+      "maxRetries": 5,
+      "startAtSeconds": 2,
+      "frequencySeconds": 2.5
+    },
+    "beepMaxAwaitSeconds": 12
+  },
     }
 
     end_call_tool = {
@@ -445,15 +445,15 @@ async def assistant_payload(assistant_data):
         "analysisPlan": {
             "summaryPrompt": assistant_data.systemPrompt,
         },
-        "voicemailDetection": {
-        "provider": "twilio",
-        "voicemailDetectionTypes": ["machine_end_beep", "machine_end_silence"],
-        "enabled": True,
-        "machineDetectionTimeout": 3,
-        "machineDetectionSpeechThreshold": 1000,
-        "machineDetectionSpeechEndThreshold": 500,
-        "machineDetectionSilenceTimeout": 2000
-        }
+          "voicemailDetection": {
+    "provider": "vapi",
+    "backoffPlan": {
+      "maxRetries": 5,
+      "startAtSeconds": 2,
+      "frequencySeconds": 2.5
+    },
+    "beepMaxAwaitSeconds": 12
+  },
             }
 
     end_call_tool = {

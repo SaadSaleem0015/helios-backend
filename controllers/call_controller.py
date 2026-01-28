@@ -665,7 +665,7 @@ async def handle_end_of_call_report(payload):
     try:
         print("\n========== END OF CALL REPORT RECEIVED ==========")
 
-
+        print("payload", payload)
         message = payload.get("message", {})
 
         call_data = message.get("call", {})
@@ -807,7 +807,11 @@ async def handle_end_of_call_report(payload):
         print(call_log_data)
 
         await CallLog.create(**call_log_data)
-
+        await Spent.create(
+            user=user,
+            spent_money=cost,
+            description="Call Cost"
+        )
         print("✅ CALL LOG SAVED SUCCESSFULLY")
         print("===============================================\n")
 

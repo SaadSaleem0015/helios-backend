@@ -201,20 +201,20 @@ async def import_leads_file(user: Annotated[User, Depends(get_current_user)],
             # setting = await VVadminSetting.filter(user_id=user.id).first()
             # max_lead_limit = setting.max_lead_limit_free_trial if setting and setting.max_lead_limit_free_trial is not None else 1000
             
-        max_lead_limit = 30
-        print(f"The max lead limt for this user is {max_lead_limit}")
+        # max_lead_limit = 30
+        # print(f"The max lead limt for this user is {max_lead_limit}")
             
-        if total_leads > max_lead_limit:
-                return {
-                    "success":False,
-                    "detail":f"Only {max_lead_limit} leads allow to upload in Free Version"
-                }
+        # if total_leads > max_lead_limit:
+        #         return {
+        #             "success":False,
+        #             "detail":f"Only {max_lead_limit} leads allow to upload in Free Version"
+        #         }
                             
-        if num_leads > max_lead_limit:
-                content = "\n".join(content.splitlines()[:max_lead_limit])
-                message = f"Only {max_lead_limit} leads will be uploaded due to free Version restrictions."
+        # if num_leads > max_lead_limit:
+        #         content = "\n".join(content.splitlines()[:max_lead_limit])
+        #         message = f"Only {max_lead_limit} leads will be uploaded due to free Version restrictions."
 
-                return await process_file_upload(content, file, name, user, num_leads, message)
+        #         return await process_file_upload(content, file, name, user, num_leads, message)
 
         return await process_file_upload(content, file, name, user, num_leads,None)
 
@@ -242,6 +242,7 @@ async def get_files(user: Annotated[User, Depends(get_current_user)]):
             "name":file.name,
             "alphanumeric_id":file.alphanumeric_id,
             "created_at":file.created_at,
+            "type":file.type,
             "leads_count": leads_count
         })                                                                    
     return files_with_leads_count
