@@ -40,7 +40,7 @@ TORTOISE_CONFIG = {
                 "models.zoho_crm",
                 "models.close_crm",
                 "models.hubspot_crm",
-
+                "models.twilio_credentials",
                 "models.dnc",
 
                 "models.auto_replenishment",

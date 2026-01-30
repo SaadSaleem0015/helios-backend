@@ -1,5 +1,5 @@
 import datetime
-from typing import List,Annotated
+from typing import List, Annotated, Optional
 from fastapi import Depends, HTTPException,APIRouter
 import httpx
 from pydantic import BaseModel
@@ -21,8 +21,9 @@ from models.purchased_number import PurchasedNumber
 from models.spent import Spent
 from models.super_admin_setting import SuperAdminSetting
 from models.user import User
+from models.twilio_credentials import TwilioCredential
 # from models.vv_adminSetting import VVadminSetting
-
+from twilio.base.exceptions import TwilioRestException
 
 dotenv.load_dotenv()
 twilio_router = APIRouter()
@@ -30,24 +31,251 @@ twilio_router = APIRouter()
 # class PhoneNumberRequest(BaseModel):
 #     area_code: str
 
-class PurchaseNumberRequest(BaseModel):
-    phone_number: List[str]
 class RemoveNumberRequest(BaseModel):
     phone_number: str
+
+
 class PhoneNumberRequest(BaseModel):
-    country:str
-    area_codes: List[str]  
+    country: str
+    area_codes: List[str]
+
+
 class PurchaseNumberRequest(BaseModel):
-    phone_number: List[str]  
+    phone_number: List[str]
+
+
+class TwilioCredentialCreateUpdate(BaseModel):
+    account_sid: str
+    auth_token: str
+    address_sid: Optional[str] = None
 
 domain = os.getenv("DOMAIN")
 VAPI_WEBHOOK_URL = f"https://api.theheliosai.com/api/webhooks/vapi"
-    
 
-account_sid = os.environ['TWILIO_ACCOUNT_SID']
-auth_token = os.environ['TWILIO_AUTH_TOKEN']
-print("account_sid",account_sid)
-client = Client(account_sid, auth_token)
+
+def validate_twilio_credentials(account_sid: str, auth_token: str, address_sid: Optional[str] = None) -> bool:
+    """
+    Validate Twilio credentials by attempting to fetch the account resource.
+    Returns True if credentials are valid.
+    Raises HTTPException (401) on authentication failure.
+    Raises HTTPException (500) on unexpected errors.
+    """
+    if address_sid:
+        if not address_sid.startswith("AD"):
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid AddressSid format. It should start with 'AD' followed by 32 hex characters."
+            )
+    if not account_sid or not auth_token:
+        raise HTTPException(
+            status_code=400,
+            detail="Account SID and Auth Token are required"
+        )
+
+    try:
+        client = Client(account_sid, auth_token)
+        # The cheapest / most reliable auth check
+        account = client.api.account.fetch()
+
+        # Optional (almost never needed)
+        if account.sid != account_sid:
+            raise ValueError("Account SID mismatch (very unexpected)")
+
+        return True
+
+    except TwilioRestException as e:
+        # Most common auth failures
+        if e.status == 401 or e.code in (20003, 20004, 20005):  # 20003 = auth failed
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid Twilio credentials: Authentication failed. "
+                       "Please check your Account SID and Auth Token."
+            ) from e
+
+        # Other Twilio errors (rate limit, account suspended, etc.)
+        raise HTTPException(
+            status_code=e.status or 400,
+            detail=f"Twilio API error {e.code}: {e.msg}"
+        ) from e
+
+    except Exception as e:
+        # Very unexpected failure (network, bug in library, etc.)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to validate Twilio credentials: {str(e)}"
+        ) from e
+
+async def get_twilio_client_for_user(user: User) -> Client:
+    """
+    Resolve Twilio credentials for the given user and return a Twilio client.
+    Raises HTTPException if credentials are missing.
+    """
+    creds = await TwilioCredential.filter(user=user).first()
+    if not creds:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "success": False,
+                "detail": "Twilio credentials not configured for this user. Please add them first.",
+            },
+        )
+
+    return Client(creds.account_sid, creds.auth_token)
+
+
+# ==================== Twilio Credentials CRUD Endpoints ====================
+
+@twilio_router.post("/credentials")
+async def create_twilio_credentials(
+    request: TwilioCredentialCreateUpdate,
+    user: Annotated[User, Depends(get_current_user)],
+):
+    """
+    Create Twilio credentials for the current user.
+    Validates credentials with Twilio API before saving.
+    """
+    try:
+        print("request", request)
+        # Validate credentials with Twilio
+        validate_twilio_credentials(request.account_sid, request.auth_token, request.address_sid)
+        print("credentials validated")
+        # Check if credentials already exist for this user
+        existing_creds = await TwilioCredential.filter(user=user).first()
+        if existing_creds:
+            return{
+                    "success": False,
+                    "detail": "Twilio credentials already exist for this user. Use PUT to update them.",
+            }
+        
+        # Create new credentials
+        creds = await TwilioCredential.create(
+            user=user,
+            account_sid=request.account_sid,
+            auth_token=request.auth_token,
+            address_sid=request.address_sid,
+        )
+        
+        return {
+            "success": True,
+            "detail": "Twilio credentials created and validated successfully.",
+            "account_sid": creds.account_sid,
+            "address_sid": creds.address_sid,
+            "created_at": creds.created_at,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "success": False,
+                "detail": f"Failed to create Twilio credentials: {str(e)}",
+            },
+        )
+
+
+@twilio_router.get("/credentials")
+async def get_twilio_credentials(
+    user: Annotated[User, Depends(get_current_user)],
+):
+    """
+    Get Twilio credentials for the current user.
+    Returns account_sid only (auth_token is sensitive and not returned).
+    """
+    creds = await TwilioCredential.filter(user=user).first()
+    if not creds:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "success": False,
+                "detail": "Twilio credentials not found for this user.",
+            },
+        )
+    
+    return {
+        "success": True,
+        "account_sid": creds.account_sid,
+        "address_sid": creds.address_sid,
+        "created_at": creds.created_at,
+        "updated_at": creds.updated_at,
+    }
+
+
+@twilio_router.put("/credentials")
+async def update_twilio_credentials(
+    request: TwilioCredentialCreateUpdate,
+    user: Annotated[User, Depends(get_current_user)],
+):
+    """
+    Update Twilio credentials for the current user.
+    Validates credentials with Twilio API before updating.
+    """
+    try:
+        # Validate credentials with Twilio
+        validate_twilio_credentials(request.account_sid, request.auth_token, request.address_sid)
+        
+        # Get existing credentials
+        creds = await TwilioCredential.filter(user=user).first()
+        if not creds:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "success": False,
+                    "detail": "Twilio credentials not found for this user. Use POST to create them.",
+                },
+            )
+        
+        # Update credentials
+        creds.account_sid = request.account_sid
+        creds.auth_token = request.auth_token
+        creds.address_sid = request.address_sid
+        await creds.save()
+        
+        return {
+            "success": True,
+            "detail": "Twilio credentials updated and validated successfully.",
+            "account_sid": creds.account_sid,
+            "address_sid": creds.address_sid,
+            "updated_at": creds.updated_at,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "success": False,
+                "detail": f"Failed to update Twilio credentials: {str(e)}",
+            },
+        )
+
+
+@twilio_router.delete("/credentials")
+async def delete_twilio_credentials(
+    user: Annotated[User, Depends(get_current_user)],
+):
+    """
+    Delete Twilio credentials for the current user.
+    """
+    creds = await TwilioCredential.filter(user=user).first()
+    if not creds:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "success": False,
+                "detail": "Twilio credentials not found for this user.",
+            },
+        )
+    
+    await creds.delete()
+    
+    return {
+        "success": True,
+        "detail": "Twilio credentials deleted successfully.",
+    }
+
+
+# ==================== End Twilio Credentials CRUD Endpoints ====================
 
 @twilio_router.post("/update-all-vapi-server-urls")
 async def update_all_vapi_phone_server_urls(
@@ -115,9 +343,12 @@ async def update_all_vapi_phone_server_urls(
         "failures": failures
     }
 @twilio_router.post("/number_info")
-def check_sms_capability(phone_number_sid: str):
+async def check_sms_capability(
+    phone_number_sid: str,
+    current_user: User = Depends(get_current_user),
+):
     try:
-        print("account_sid",account_sid)
+        client = await get_twilio_client_for_user(current_user)
 
         phone_number = client.incoming_phone_numbers(phone_number_sid).fetch()
         if phone_number.sms_enabled:
@@ -129,36 +360,85 @@ def check_sms_capability(phone_number_sid: str):
         return {"error": str(e)}
 
 @twilio_router.post("/available_phone_numbers")
-async def buy_phone_number(request: PhoneNumberRequest, user: Annotated[User, Depends(get_current_user)]):
+async def buy_phone_number(
+    request: PhoneNumberRequest,
+    user: Annotated[User, Depends(get_current_user)],
+):
     available_numbers = []
-    
-    country = request.country
-    for area_code in request.area_codes:
-        if country == "CA":
-            # Handle Canada
-            numbers_for_area_code = client.available_phone_numbers('CA').local.list(area_code=area_code)
-        else:
-            # Handle United States
-            numbers_for_area_code = client.available_phone_numbers("US").local.list(area_code=area_code)
+    seen_numbers = set()
+    client = await get_twilio_client_for_user(user)
 
-        if numbers_for_area_code:
-            for number in numbers_for_area_code:
+    country = request.country
+    for code in request.area_codes:
+        code = code.strip()
+        if not code.isdigit():
+            continue  # skip invalid
+
+        params = {
+            "limit": 10,
+            "voice_enabled": True,
+        }
+
+        try:
+            # Decide filter based on country
+            if country in ("US", "CA"):
+                # NANP countries: use area_code (expects 3-digit usually)
+                if len(code) != 3:
+                    continue  # or raise warning, but skip for now
+                params["area_code"] = int(code)
+                search_method = client.available_phone_numbers(country).local.list
+            else:
+                # All other countries: use contains (prefix/pattern)
+                params["contains"] = code  # e.g. "030", "20", "30"
+                search_method = client.available_phone_numbers(country).local.list
+
+            # First try local numbers
+            numbers = search_method(**params)
+
+            # If none, fallback to mobile (good for many international countries)
+            if not numbers:
+                search_method = client.available_phone_numbers(country).mobile.list
+                numbers = search_method(**params)
+
+            for number in numbers:
+                phone = number.phone_number
+                if phone in seen_numbers:
+                    continue
+                seen_numbers.add(phone)
+
                 available_numbers.append({
                     "friendly_name": number.friendly_name,
-                    "phone_number": number.phone_number,
-                    "region": number.region,
-                    "postal_code": number.postal_code,
-                    "iso_country": number.iso_country,
-                    "capabilities": number.capabilities
+                    "phone_number": phone,
+                    "region": number.region or "N/A",
+                    "postal_code": number.postal_code or "N/A",
+                    "iso_country": number.iso_country or country,
+                    "capabilities": number.capabilities,
+                    "type": "mobile" if "mobile" in str(search_method) else "local",  # optional tag
+                    "matched_on": code,
                 })
+
+        except Exception as e:  # TwilioRestException or others
+            # Log e, but continue to next code
+            print(f"Error for {country} / {code}: {str(e)}")
+            continue
+
+    if not available_numbers:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No available numbers found for country {country} with codes: {', '.join(request.area_codes)}"
+        )
 
     return available_numbers
 
 @twilio_router.post("/available_phone_numbjjers")
-async def get_switzerland_numbers_by_area():
+async def get_switzerland_numbers_by_area(
+    user: Annotated[User, Depends(get_current_user)],
+):
     available_numbers = []
     
     try:
+        client = await get_twilio_client_for_user(user)
+
         area_code = '91'
         
         # Build query parameters - THIS IS THE FIX!
@@ -198,9 +478,23 @@ async def get_switzerland_numbers_by_area():
     
    
 @twilio_router.post("/purchase_phone_number")
-async def purchase_phone_number(request: PurchaseNumberRequest, user: Annotated[User, Depends(get_current_user)]):
+async def purchase_phone_number(
+    request: PurchaseNumberRequest,
+    user: Annotated[User, Depends(get_current_user)],
+):
     try:
         user = await User.filter(id=user.id).first()
+        # Get Twilio credentials from database
+        twilio_creds = await TwilioCredential.filter(user=user).first()
+        if not twilio_creds:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "success": False,
+                    "detail": "Twilio credentials not configured for this user. Please add them first.",
+                },
+            )
+        client = await get_twilio_client_for_user(user)
         
 
         # is_in_free_trial = False
@@ -237,23 +531,26 @@ async def purchase_phone_number(request: PurchaseNumberRequest, user: Annotated[
                 print("Balance is less than 5")
                 return {"success": False, "detail": "Insufficient balance."}
 
-        SMS_URL = os.getenv("SMS_URL")
         async with in_transaction():
             purchased_numbers = []
             for phone_number in request.phone_number:
                 print("request.phone_number", request.phone_number)
-                purchased_number = client.incoming_phone_numbers.create(
-                    phone_number=phone_number
-                )
-                client.incoming_phone_numbers(purchased_number.sid).update(
-                    sms_url=SMS_URL
-                )
+                if twilio_creds.address_sid:
+                    purchased_number = client.incoming_phone_numbers.create(
+                        phone_number=phone_number,
+                        address_sid=twilio_creds.address_sid
+                    )
+                else:
+                    purchased_number = client.incoming_phone_numbers.create(
+                        phone_number=phone_number
+                    )
+          
                 print(f"number {purchased_number}")
                 attach_payload = {
                     "provider": "twilio",
                     "number": purchased_number.phone_number,
-                    "twilioAccountSid": os.environ.get('TWILIO_ACCOUNT_SID'),
-                    "twilioAuthToken": os.environ.get('TWILIO_AUTH_TOKEN'),
+                    "twilioAccountSid": twilio_creds.account_sid,
+                    "twilioAuthToken": twilio_creds.auth_token,
                     "name": "Twilio Number",
                     "server": {
 
@@ -287,19 +584,19 @@ async def purchase_phone_number(request: PurchaseNumberRequest, user: Annotated[
                             iso_country=None,
                         )
                         purchased_numbers.append(purchased_entry.phone_number)
-                number_price = 5
-                # user_setting = await SuperAdminSetting.filter(user=user).first()
-                # if not user_setting:         
-                default_setting = await DefaultSettings.first()
-                if default_setting:
-                    number_price = default_setting.phone_number_price
+                # number_price = 5
+                # # user_setting = await SuperAdminSetting.filter(user=user).first()
+                # # if not user_setting:         
+                # default_setting = await DefaultSettings.first()
+                # if default_setting:
+                #     number_price = default_setting.phone_number_price
                 
                 
-                await Spent.create(
-                    user=user,
-                    spent_money=number_price,
-                    description="Purchased a phone number"
-                )
+                # await Spent.create(
+                #     user=user,
+                #     spent_money=number_price,
+                #     description="Purchased a phone number"
+                # )
             # user_setting = await DefaultSettings.first()
             # main_admin = await User.filter(company_id=user.company_id, main_admin=True, role="company_admin").first()
 
@@ -328,7 +625,14 @@ async def purchase_phone_number(request: PurchaseNumberRequest, user: Annotated[
                 # "free_trial_purchase": is_in_free_trial
             }
 
-    except Exception as e:
+    except TwilioRestException as e:  
+        if e.code == 21631:
+            raise HTTPException(
+            status_code=400,
+            detail="This international number requires a valid AddressSid due to regulatory rules. "
+                   "Please add a compliant address in Twilio Console and provide its SID. "
+                   "Check requirements: https://www.twilio.com/en-us/guidelines/fr/regulatory (for France)"
+        )
         error_message = str(e) 
         print("error_message",error_message)
         raise HTTPException(status_code=400, detail={"error": error_message})
@@ -358,6 +662,7 @@ async def get_purchased_numbers( user: Annotated[User, Depends(get_current_user)
 @twilio_router.post("/remove-phone-number")
 async def return_phone_number(request: RemoveNumberRequest, user: Annotated[User, Depends(get_current_user)]):
     try:
+        client = await get_twilio_client_for_user(user)
         purchased_number = client.incoming_phone_numbers.list(phone_number=request.phone_number)
         
         if not purchased_number:

@@ -807,6 +807,15 @@ async def handle_end_of_call_report(payload):
         print(call_log_data)
 
         await CallLog.create(**call_log_data)
+        user_settings = await SuperAdminSetting.filter(user=user).first()
+        if user_settings:
+            transfer_rate = user_settings.transfer_rate
+        else:
+            default_settings = await DefaultSettings.first()
+            if default_settings:
+                transfer_rate = default_settings.transfer_rate
+        cost = (call_duration_seconds / 60) * transfer_rate if call_duration_seconds > 0 else 0
+        
         await Spent.create(
             user=user,
             spent_money=cost,

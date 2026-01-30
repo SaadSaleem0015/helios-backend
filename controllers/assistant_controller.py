@@ -235,7 +235,7 @@ async def create_assistant(assistant: AssistantCreate, user: User = Depends(get_
         if balance < 5:
                 print("Insufficient balance, skipping...")
                 return {"success" : False, "detail": "Insufficient balance."}
-
+     
         required_fields = [
             'name', 'provider', 'first_message', 'model',
             'systemPrompt', 'temperature',
@@ -245,7 +245,8 @@ async def create_assistant(assistant: AssistantCreate, user: User = Depends(get_
         empty_fields = [field for field in required_fields if not getattr(assistant, field, None)]
         if empty_fields:
             raise HTTPException(status_code=400, detail=f"All fields are required. Empty fields: {', '.join(empty_fields)}")
-
+        if assistant.temperature > 2:
+            raise HTTPException(status_code=400, detail="Temperature must be less than 2")
         payload_data =await user_add_payload(assistant,user)
         
         headers = get_headers()  
