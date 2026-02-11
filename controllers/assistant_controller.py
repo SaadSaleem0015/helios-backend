@@ -151,14 +151,12 @@ async def vapi_webhook(request: Request):
     - Rejects low-balance calls with a spoken message.
     - Allows by returning the user's assistantId.
     """
-    print("Webhook call hwi hai", request)
     try:
         payload = await request.json()
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid JSON payload")
     
     message_type = payload.get("message", {}).get("type")
-    print("message_type", message_type)
     if message_type == "end-of-call-report":
         await handle_end_of_call_report(payload)
         return Response(status_code=204)
@@ -167,13 +165,10 @@ async def vapi_webhook(request: Request):
         # Acknowledge other events (e.g., future call-started, end-of-call-report)
         return Response(status_code=204)  # No content – Vapi expects quick ack
    
-    print("payload", payload)
     # Extract key info from call
     call_data = payload.get("call", {})
     called_number = payload["message"]["phoneNumber"]["number"]
     caller_number = payload["message"]["call"]["customer"]["number"]
-    print("Caller:", caller_number)
-    print("Called:", called_number)
     
     if not called_number:
         # Rare, but reject if no called number
@@ -183,16 +178,13 @@ async def vapi_webhook(request: Request):
     purchased_num = await PurchasedNumber.filter(phone_number=called_number).first()
     if not purchased_num:
         return {"error": "This number is not active currently."}
-    print("purchased_num", purchased_num.phone_number)
     
     
     user = await User.filter(id=purchased_num.user_id).first()
-    print("user", user.email)
       # Assuming user relation
     if not user:
         return {"error": "Account not found for this number."}
-    print("caller_number  aa hai 1222312 userrrrrrrrrrr----- ",called_number)
-    
+
     # Your balance/threshold check (adapt to your logic)
     # Example: require at least $5 or whatever your min is
     user_balance = await balance_count(user.id)  # Or user.balance if direct field
@@ -210,13 +202,12 @@ async def vapi_webhook(request: Request):
     # Allowed → Return the saved assistant ID (fastest, uses your pre-created assistant)
     # Store assistantId in PurchasedNumber or User when creating assistant
     assistant_id = assistant.vapi_assistant_id  # Adjust field name if different
-    print("assistant_id ----- ",assistant_id)
 
     if not assistant_id:
         # Fallback: reject or return transient config
         return {"error": "No assistant configured for this number."}
-
     return {"assistantId": assistant_id}
+    # return {"assistantId": assistant_id, "event_type_id":event_type_id}
 
     # Alternative: Return full transient assistant config (if you want dynamic per-call changes)
     # return {

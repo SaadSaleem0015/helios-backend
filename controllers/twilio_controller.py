@@ -51,6 +51,8 @@ class TwilioCredentialCreateUpdate(BaseModel):
 
 domain = os.getenv("DOMAIN")
 VAPI_WEBHOOK_URL = f"https://api.theheliosai.com/api/webhooks/vapi"
+# VAPI_WEBHOOK_URL = f"https://540b-175-107-235-43.ngrok-free.app/api/webhooks/vapi"
+
 
 
 def validate_twilio_credentials(account_sid: str, auth_token: str, address_sid: Optional[str] = None) -> bool:
@@ -360,45 +362,49 @@ async def check_sms_capability(
         return {"error": str(e)}
 
 @twilio_router.post("/available_phone_numbers")
-async def buy_phone_number(
+async def search_available_phone_numbers(  # better name: it's search, not buy
     request: PhoneNumberRequest,
     user: Annotated[User, Depends(get_current_user)],
 ):
     available_numbers = []
     seen_numbers = set()
+
     client = await get_twilio_client_for_user(user)
 
-    country = request.country
+    country = request.country.upper().strip()
+
     for code in request.area_codes:
         code = code.strip()
-        if not code.isdigit():
-            continue  # skip invalid
+        if not code.isdigit() or not code:
+            continue
 
         params = {
             "limit": 10,
             "voice_enabled": True,
+            # Add sms_enabled if needed: "sms_enabled": True,
         }
 
         try:
-            # Decide filter based on country
+            numbers = []
+
             if country in ("US", "CA"):
-                # NANP countries: use area_code (expects 3-digit usually)
+                # NANP: area_code only on .local (mobile doesn't exist)
                 if len(code) != 3:
-                    continue  # or raise warning, but skip for now
+                    continue  # skip invalid area codes
                 params["area_code"] = int(code)
-                search_method = client.available_phone_numbers(country).local.list
+                print("params------------", params)
+                numbers = client.available_phone_numbers(country).local.list(**params)
+
             else:
-                # All other countries: use contains (prefix/pattern)
-                params["contains"] = code  # e.g. "030", "20", "30"
-                search_method = client.available_phone_numbers(country).local.list
+                # International: contains on local
+                params["contains"] = code
+                numbers = client.available_phone_numbers(country).local.list(**params)
 
-            # First try local numbers
-            numbers = search_method(**params)
+                # Fallback to mobile ONLY if not US/CA and local empty
+                if not numbers:
+                    numbers = client.available_phone_numbers(country).mobile.list(**params)
 
-            # If none, fallback to mobile (good for many international countries)
-            if not numbers:
-                search_method = client.available_phone_numbers(country).mobile.list
-                numbers = search_method(**params)
+            # print(numbers)  # keep for debug if needed, but remove in prod
 
             for number in numbers:
                 phone = number.phone_number
@@ -413,23 +419,24 @@ async def buy_phone_number(
                     "postal_code": number.postal_code or "N/A",
                     "iso_country": number.iso_country or country,
                     "capabilities": number.capabilities,
-                    "type": "mobile" if "mobile" in str(search_method) else "local",  # optional tag
+                    "type": "local",  # for US/CA always local; mobile tag only if fallback used
                     "matched_on": code,
                 })
 
-        except Exception as e:  # TwilioRestException or others
-            # Log e, but continue to next code
+        except Exception as e:
             print(f"Error for {country} / {code}: {str(e)}")
-            continue
+            continue  # skip bad codes, don't crash whole request
 
     if not available_numbers:
         raise HTTPException(
-            status_code=404,
-            detail=f"No available numbers found for country {country} with codes: {', '.join(request.area_codes)}"
+            status_code=404,  # 404 better than 401 here (not auth issue)
+            detail=f"No available numbers found for country {country} with codes: {', '.join(request.area_codes)}. "
         )
-
-    return available_numbers
-
+    # return available_numbers
+    return {
+        "success" : True,
+        "available_numbers" : available_numbers
+    }
 @twilio_router.post("/available_phone_numbjjers")
 async def get_switzerland_numbers_by_area(
     user: Annotated[User, Depends(get_current_user)],
@@ -631,7 +638,6 @@ async def purchase_phone_number(
             status_code=400,
             detail="This international number requires a valid AddressSid due to regulatory rules. "
                    "Please add a compliant address in Twilio Console and provide its SID. "
-                   "Check requirements: https://www.twilio.com/en-us/guidelines/fr/regulatory (for France)"
         )
         error_message = str(e) 
         print("error_message",error_message)

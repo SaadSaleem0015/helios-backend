@@ -125,7 +125,7 @@ async def hubspot_oauth_callback(
         )
 
         # Redirect to frontend success page
-        return RedirectResponse(f"{os.getenv("DOMAIN")}/hubspot-leads")
+        return RedirectResponse(f"{os.getenv('DOMAIN')}/hubspot-leads")
 
     except Exception as e:
         raise HTTPException(500, f"OAuth callback failed: {str(e)}")

@@ -42,7 +42,8 @@ TORTOISE_CONFIG = {
                 "models.hubspot_crm",
                 "models.twilio_credentials",
                 "models.dnc",
-
+                "models.cal_integration",
+                "models.support_ticket",
                 "models.auto_replenishment",
                 "aerich.models"
             ]

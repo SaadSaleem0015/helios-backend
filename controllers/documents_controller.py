@@ -16,7 +16,7 @@ token = generate_token()
 async def upload_documents(user: Annotated[User, Depends(get_current_user)],
  file: UploadFile = FastAPIFile(...), name : str = Form(...)):
     try:
-        if file.filename.split(".")[-1].lower() not in ["pdf", "doc", "docx", "txt"]:
+        if file.filename.split('.')[-1].lower() not in ["pdf", "doc", "docx", "txt"]:
             raise HTTPException(
                 status_code=400,
                 detail="Unsupported Format. Only PDF and DOC/DOCX files are allowed."
@@ -30,7 +30,7 @@ async def upload_documents(user: Annotated[User, Depends(get_current_user)],
             vapi_response = await client.post(
                 vapi_url,
                 headers=get_file_headers(),
-                files={"file": (f"{name}.{file.filename.split(".")[-1].lower()}",  io.BytesIO(await file.read()), file.content_type)}
+                files={"file": (f"{name}.{file.filename.split('.')[-1].lower()}",  io.BytesIO(await file.read()), file.content_type)}
             )
         if vapi_response.status_code not in [200, 201]:
             raise HTTPException(

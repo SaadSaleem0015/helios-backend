@@ -5,6 +5,8 @@ from pydantic import BaseModel, EmailStr
 from typing import Annotated,Optional
 from models.user import User
 from models.code import Code
+from models.defaultSettings import DefaultSettings
+from models.super_admin_setting import SuperAdminSetting
 from helpers.jwt_token import generate_user_token, get_admin, get_current_user
 from helpers.email import generate_code
 from helpers.criteria_check import balance_count
@@ -73,6 +75,39 @@ async def  signup(payload: SignupPayload):
             password = ph.hash(payload.password),
         )
         await user.save()
+
+        # Ensure default settings exist; create with dummy values if missing
+        try:
+            default_setting = await DefaultSettings.first()
+            if not default_setting:
+                default_setting = await DefaultSettings.create(
+                    max_call_duration=100,
+                    max_calls=50,
+                    transfer_rate=2.0,
+                    monthly_fee=100,
+                    phone_number_price=5,
+                    seconds_per_dollar=60,
+                    call_frequency=10,
+                    call_period_minutes=3,
+                    max_call_limit_free_trial=2000,
+                    max_lead_limit_free_trial=3000,
+                )
+
+            await SuperAdminSetting.create(
+                    user=user,
+                    max_call_duration=default_setting.max_call_duration,
+                    max_calls=default_setting.max_calls,
+                    transfer_rate=default_setting.transfer_rate,
+                    monthly_fee=default_setting.monthly_fee,
+                    seconds_per_dollar=default_setting.seconds_per_dollar,
+                    call_frequency=default_setting.call_frequency,
+                    call_period_minutes=default_setting.call_period_minutes,
+                    max_call_limit_free_trial=default_setting.max_call_limit_free_trial,
+                    max_lead_limit_free_trial=default_setting.max_lead_limit_free_trial,
+                )
+        except Exception:
+            # don't block signup on settings creation failure
+            pass
 
         is_email_sent:bool = await generate_code("account_activation", user=user)
         if(is_email_sent):

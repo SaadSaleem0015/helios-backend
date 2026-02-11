@@ -11,7 +11,7 @@ from controllers.hubspot_controller import hubspot_router
 from controllers.schedule_call_controller import schedule_router
 from controllers.terms_conditons_controller import terms_router
 from controllers.twilio_controller import twilio_router
-
+from controllers.support_controller import support_router
 load_dotenv()
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -21,7 +21,7 @@ from controllers.admin_statictics_controller import admin_statistics_router
 from controllers.lead_controller import leads_router
 from controllers.stripe_controller import stripe_router
 from controllers.crm_controller import crm_router
-
+from controllers.cal_controller import cal_booking_router
 
 
 
@@ -53,6 +53,9 @@ app.include_router(default_settings_router, prefix = "/api" , tags = {"Defualt S
 app.include_router(crm_router, prefix='/api', tags=['CRM Integration'])
 app.include_router(dnc_router, prefix='/api', tags=['DNC'])
 app.include_router(hubspot_router, prefix='/api/crm', tags=['Hubspot'])
+app.include_router(cal_booking_router, prefix = "/api", tags=["Cal"])
+app.include_router(support_router, prefix = "/api", tags=["Support"])
+
 
 
 

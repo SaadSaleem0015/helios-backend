@@ -21,6 +21,9 @@ class User(Model):
     is_active = fields.BooleanField(default=True)
     criteria_approved = fields.BooleanField(default=False)
     submit_for_approval = fields.BooleanField(default=False)
+    last_fee_deducted = fields.DatetimeField(null=True)
+    fee_reminder_email = fields.BooleanField(default=False)
+    fee_reminder_tries = fields.IntField(default=0)
     files: fields.ReverseRelation['File']
     settings: fields.ReverseRelation['Setting']
     documents: fields.ReverseRelation['Documents']
