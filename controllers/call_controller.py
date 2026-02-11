@@ -744,7 +744,15 @@ async def handle_end_of_call_report(payload):
 
 
         # Transfer detection
-        is_transferred = 
+        is_transferred = False
+            
+        try:
+            transfer_result = await analyze_call_transfer(transcript)
+            is_transferred = transfer_result.get("isTransferred", False)
+            print(f"is talk with human : {is_transferred}")
+        except Exception as e:
+            print(f"Error in analyze_call_transfer but continue to save other call logs: {str(e)}")
+            is_transferred = False
         # Success evaluation
         criteria_satisfied = False
         # success_evaluation = analysis.get("successEvaluation", {})
