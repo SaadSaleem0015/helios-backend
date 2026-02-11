@@ -28,6 +28,19 @@ async def get_current_user(credentials: Annotated[HTTPAuthorizationCredentials, 
             raise HTTPException(status_code=401, detail="Invalid Credentials")
 
 
+async def get_active_user(user: Annotated[User, Depends(get_current_user)]):
+    """
+    Dependency that ensures the current user account is active.
+    Raises 403 if user.is_active is False.
+    """
+    if not user.is_active:
+        raise HTTPException(
+            status_code=403,
+            detail="Your account is inactive. Please contact support."
+        )
+    return user
+
+
 async def get_admin(credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)]):
     token = credentials.credentials
     credentials_exception = HTTPException(

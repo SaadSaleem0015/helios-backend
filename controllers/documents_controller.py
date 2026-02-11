@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Form, HTTPException, UploadFile, File as FastAPIFile, Depends
-from helpers.jwt_token import get_current_user
+from helpers.jwt_token import get_current_user, get_active_user
 from models.user import User
 from models.document import Document
 from typing import Annotated
@@ -13,7 +13,7 @@ kb_router = APIRouter()
 token = generate_token()
 
 @kb_router.post("/documents")
-async def upload_documents(user: Annotated[User, Depends(get_current_user)],
+async def upload_documents(user: Annotated[User, Depends(get_active_user)],
  file: UploadFile = FastAPIFile(...), name : str = Form(...)):
     try:
         if file.filename.split('.')[-1].lower() not in ["pdf", "doc", "docx", "txt"]:
@@ -78,8 +78,7 @@ async def vapi_docs(user: Annotated[User, Depends(get_current_user)]):
 @kb_router.delete("/delete_vapi_doc/{vapi_file_id}")
 async def delete_vapi_doc(
     vapi_file_id: str,
-    user: Annotated[User, Depends(get_current_user)],
-
+    user: Annotated[User, Depends(get_active_user)],
 ):
     try:
         print("vapi_header:",vapi_header)

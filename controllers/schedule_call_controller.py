@@ -14,7 +14,7 @@ from models.schedule import Schedule
 from models.schedule_time import ScheduleTime
 from models.schedule_call import ScheduleCall
 from models.user import User
-from helpers.jwt_token import get_current_user
+from helpers.jwt_token import get_current_user, get_active_user
 from helpers.SceduleCall import trigger_scheduled_call
 schedule_router = APIRouter()
 
@@ -39,7 +39,10 @@ TIMEZONE_ALIASES = {
 }
 
 @schedule_router.post("/scheduled-call")
-async def schedule_call(data: Schedule_Call,main_admin: Annotated[User, Depends(get_current_user)], user: User = Depends(get_current_user),
+async def schedule_call(
+    data: Schedule_Call,
+    main_admin: Annotated[User, Depends(get_active_user)],
+    user: User = Depends(get_active_user),
 ):
     payment_method = await has_payment_method(user)
     if not payment_method:
@@ -299,7 +302,7 @@ async def get_user_schedules( user: Annotated[User, Depends(get_current_user)]):
 #             "detail": str(e)
 #         }
 @schedule_router.delete('/delete_scheduled_call/{id}')
-async def delete_calls(id: int, user: Annotated[User, Depends(get_current_user)]):
+async def delete_calls(id: int, user: Annotated[User, Depends(get_active_user)]):
     try:
         call = await Schedule.get_or_none(id=id, user_id=user.id).prefetch_related("schedule_times")
         
@@ -330,7 +333,7 @@ async def delete_calls(id: int, user: Annotated[User, Depends(get_current_user)]
 #             "detail": str(e)
 #         }
 @schedule_router.get('/get_scheduled_call/{id}')
-async def get_scheduled_call(id: int, user: Annotated[User, Depends(get_current_user)]):
+async def get_scheduled_call(id: int, user: Annotated[User, Depends(get_active_user)]):
     try:
         scheduled_call = await Schedule.get_or_none(id=id, user_id=user.id).prefetch_related("schedule_times")
 
@@ -360,7 +363,7 @@ async def get_scheduled_call(id: int, user: Annotated[User, Depends(get_current_
             "detail": str(e)
         }
 @schedule_router.get('/get_scheduled_call')
-async def get_call( user: Annotated[User, Depends(get_current_user)]):
+async def get_call( user: Annotated[User, Depends(get_active_user)]):
     try:
         scheduled_call = await Schedule.filter(user_id=user.id).prefetch_related("schedule_times").first()
 
@@ -423,7 +426,10 @@ async def get_call( user: Annotated[User, Depends(get_current_user)]):
 
 
 @schedule_router.put('/update_scheduled_call/{id}')
-async def update_call(id: int, callData: Schedule_Call, user: Annotated[User, Depends(get_current_user)],
+async def update_call(
+    id: int,
+    callData: Schedule_Call,
+    user: Annotated[User, Depends(get_active_user)],
 ):
     
     if not callData.schedule:

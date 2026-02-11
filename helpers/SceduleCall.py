@@ -51,6 +51,10 @@ async def assistant_call(vapi_assistant_id: str, lead_id: int, user: User):
     print(f'Starting assistant_call for lead_id: {lead_id}')
     
     try:
+        # Block any scheduled calls for inactive users
+        if not user.is_active:
+            return {"success": False, "detail": "Your account is inactive. Please contact support."}
+
         # Check if enough time has passed since last call 
         if not await check_lead_call_interval(lead_id):
             return {"success": False, "detail": "Call interval not met (20 minutes required)"}

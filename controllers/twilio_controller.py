@@ -9,7 +9,7 @@ import os
 import dotenv
 # from helpers.criteria_check import balance_count, has_payment_method,can_buy_number
 from helpers.criteria_check import balance_count, has_payment_method
-from helpers.jwt_token  import get_admin, get_current_user
+from helpers.jwt_token  import get_admin, get_current_user, get_active_user
 from helpers.vapi_helper import get_headers
 from models.assistant import Assistant
 # from models.defaultSettings import DefaultSettings
@@ -487,7 +487,7 @@ async def get_switzerland_numbers_by_area(
 @twilio_router.post("/purchase_phone_number")
 async def purchase_phone_number(
     request: PurchaseNumberRequest,
-    user: Annotated[User, Depends(get_current_user)],
+    user: Annotated[User, Depends(get_active_user)],
 ):
     try:
         user = await User.filter(id=user.id).first()

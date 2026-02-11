@@ -19,7 +19,7 @@ from typing import Optional, Dict
 from pydantic import StringConstraints
 from typing_extensions import Annotated
 # from models.vv_adminSetting import VVadminSetting
-from helpers.jwt_token import get_current_user
+from helpers.jwt_token import get_current_user, get_active_user
 leads_router = APIRouter()
 
 class DeleteLeadPayload(BaseModel):
@@ -63,7 +63,7 @@ class LeadInput(BaseModel):
 
         
 @leads_router.post("/add_manually_lead")
-async def add_lead_manually( data: CreateLeadPayload, user: Annotated[User, Depends(get_current_user)]):
+async def add_lead_manually( data: CreateLeadPayload, user: Annotated[User, Depends(get_active_user)]):
     try:
         # payment_method = await has_payment_method(main_admin)
         # if not payment_method:
@@ -169,7 +169,7 @@ async def get_lead_count_for_user(user_id: int) -> int:
         raise HTTPException(status_code=500, detail=f"Error retrieving leads: {str(e)}")
 
 @leads_router.post("/files")
-async def import_leads_file(user: Annotated[User, Depends(get_current_user)], 
+async def import_leads_file(user: Annotated[User, Depends(get_active_user)], 
                              file: UploadFile = FastAPIFile(...), name: str = Form(...)):
     try:  
         content_bytes = await file.read()
@@ -249,7 +249,7 @@ async def get_files(user: Annotated[User, Depends(get_current_user)]):
 
 
 @leads_router.delete("/files/{id}")
-async def delete_file(id: int,user: Annotated[User, Depends(get_current_user)]):
+async def delete_file(id: int,user: Annotated[User, Depends(get_active_user)]):
     file = await FileModel.get_or_none(id=id)
   
     await file.delete()
@@ -297,7 +297,7 @@ async def leads(user: Annotated[User, Depends(get_current_user)],file_id: Option
     return await Lead.filter(**filters).all()
 
 @leads_router.delete("/leads")
-async def delete_lead(data: DeleteLeadPayload, user: Annotated[User, Depends(get_current_user)]):
+async def delete_lead(data: DeleteLeadPayload, user: Annotated[User, Depends(get_active_user)]):
     leads = await Lead.filter(id__in=data.ids, file__user_id=user.id).all()
     await asyncio.gather(*[lead.delete() for lead in leads])
     return { 

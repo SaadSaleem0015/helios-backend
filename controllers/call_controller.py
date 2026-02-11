@@ -76,21 +76,28 @@ async def get_user_call_logs(user: Annotated[User, Depends(get_current_user)]):
         print(str(e))
         raise HTTPException(status_code=400, detail=f"{str(e)}")
     
-@calllogs_router.get("/user/call-logs-detail") 
+@calllogs_router.get("/user/call-logs-detail")
 async def get_user_call_logs(user: Annotated[User, Depends(get_current_user)]):
     try:
+        # Fetch call logs
         call_logs = await CallLog.filter(user=user).prefetch_related("user").all().order_by("-id")
         
-        if not call_logs:  
+        if not call_logs:
             return []
+
+        # Convert to list of dicts, excluding 'cost'
+        result = []
+        for log in call_logs:
+            log_dict = log.__dict__.copy()  # get all fields
+            log_dict.pop("cost", None)      # remove 'cost' if exists
+            result.append(log_dict)
         
-        return call_logs
+        return result
 
     except Exception as e:
         print("An error occurred while retrieving call logs:")
         print(str(e))
         raise HTTPException(status_code=400, detail=f"{str(e)}")
-    
 @calllogs_router.get("/specific-number-call-logs/{phoneNumber}")
 async def call_details(phoneNumber: str, user:Annotated[User, Depends(get_current_user)]):
     try:
@@ -328,7 +335,15 @@ async def get_call_details(call_id: str, delay: int ,user_id :int, lead_id : Opt
                await lead.save()
 
         
-        is_transferred = True
+        is_transferred = False
+        try:
+            transfer_result = await analyze_call_transfer(transcript)
+            is_transferred = transfer_result.get("isTransferred", False)
+            print(f"is talk with human : {is_transferred}")
+        except Exception as e:
+            print(f"Error in analyze_call_transfer but continue to save other call logs: {str(e)}")
+            is_transferred = False
+
         call_duration = None
         if started_at and ended_at:
             start_time = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
@@ -337,14 +352,8 @@ async def get_call_details(call_id: str, delay: int ,user_id :int, lead_id : Opt
 
         if is_transferred:
             transfer_rate = 0
-            
-            user_setting = await SuperAdminSetting.filter(user=user).first()
-            
-            if user_setting:
-                transfer_rate = user_setting.transfer_rate
-            else:
-                defaultSettings = await DefaultSettings.first()
-                transfer_rate = defaultSettings.transfer_rate
+            defaultSettings = await DefaultSettings.first()
+            transfer_rate = defaultSettings.transfer_rate
             
             call_cost = (call_duration / 60) * transfer_rate if call_duration > 0 else 0
             if call_cost > 0:
@@ -597,32 +606,32 @@ def create_background_task(call_id: str, delay: int, user_id: int, lead_id: Opti
     return task
 
 
-# async def analyze_call_transfer(transcript: str) -> dict:
-#     prompt = """
-#     Did the conversation start with the AI agent calling the user, and did the user pick up the call? 
-#     Based on the provided transcript, please determine if the conversation involves the AI agent speaking directly with the human user 
-#     or if an automated system (bot) responded on the user's side.
+async def analyze_call_transfer(transcript: str) -> dict:
+    prompt = """
+    Did the conversation start with the AI agent calling the user, and did the user pick up the call? 
+    Based on the provided transcript, please determine if the conversation involves the AI agent speaking directly with the human user 
+    or if an automated system (bot) responded on the user's side.
 
-#     If the conversation is between the AI agent and a human (user), just respond with: 
-#     isTransferred: True
+    If the conversation is between the AI agent and a human (user), just respond with: 
+    isTransferred: True
 
-#     If a bot or automated system responded on the user's side instead of the user speaking directly, just respond with:
-#     isTransferred: False
+    If a bot or automated system responded on the user's side instead of the user speaking directly, just respond with:
+    isTransferred: False
 
-#     Transcript:
-#     {transcript}
-#     """
-#     prompt = ChatPromptTemplate.from_template(prompt)
-#     model = ChatOpenAI(model="gpt-4o-mini", temperature=0.2)
-#     output_parser = StrOutputParser()
-#     chain = prompt | model | output_parser
-#     result = await chain.ainvoke({
-#         "transcript": transcript
-#     })
+    Transcript:
+    {transcript}
+    """
+    prompt = ChatPromptTemplate.from_template(prompt)
+    model = ChatOpenAI(model="gpt-4o-mini", temperature=0.2)
+    output_parser = StrOutputParser()
+    chain = prompt | model | output_parser
+    result = await chain.ainvoke({
+        "transcript": transcript
+    })
     
-#     is_transferred = "True" if "True" in result else "False"
+    is_transferred = "True" if "True" in result else "False"
     
-#     return {"isTransferred": is_transferred == "True"}
+    return {"isTransferred": is_transferred == "True"}
 
 async def analyze_dnc(transcript: str, dnc_prompts: list) -> dict:
     dnc_prompts_str = [str(dnc) for dnc in dnc_prompts] 
@@ -707,56 +716,23 @@ async def handle_end_of_call_report(payload):
                lead_number = lead.mobile 
                lead_id = lead.id
                
-        print("lead_name",lead_name)
-        
-        print("\nPHONE NUMBERS:")
-        print("Caller (customer) number:", customer_number)  # ends 675
-        print("Called (Twilio) number:", called_number)      # ends 125
 
-        # Calculate duration
-        # call_duration = None
-        # call_started_at = None
-        # call_ended_at = None
-
-        # if started_at and ended_at:
-        #     try:
-        #         start_time = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
-        #         end_time = datetime.fromisoformat(ended_at.replace("Z", "+00:00"))
-
-        #         call_duration = (end_time - start_time).total_seconds()
-        #         call_started_at = start_time
-        #         call_ended_at = end_time
-
-        #         print("\nCALL TIMING:")
-        #         print("Duration (seconds):", call_duration)
-
-        #     except ValueError as e:
-        #         print("TIME PARSE ERROR:", e)
-        #         return {"error": f"Start and end time issue: {e}"}
-
-        # Find user by called number
         user = None
         if called_number:
             try:
-                print("\nLOOKING UP USER FOR NUMBER:", called_number)
                 purchased_num = await PurchasedNumber.filter(phone_number=called_number).first()
 
                 if purchased_num:
                     user = await User.filter(id=purchased_num.user_id).first()
-                    print("USER FOUND:", user)
                 else:
                     print("NO PURCHASED NUMBER FOUND")
 
             except Exception as e:
-                print("USER LOOKUP ERROR:", e)
                 return {"error": f"Unable to find user: {e}"}
 
         # Analysis data
         analysis = message.get("analysis", {})
         structured_data = analysis.get("structuredData", {})
-
-        print("\nANALYSIS:")
-        print(analysis)
 
         customer_name = None
         if isinstance(structured_data, dict):
@@ -766,12 +742,9 @@ async def handle_end_of_call_report(payload):
                 or structured_data.get("name")
             )
 
-        print("Customer Name:", customer_name)
 
         # Transfer detection
-        is_transferred = "transfer" in str(message).lower()
-        print("Was Call Transferred:", is_transferred)
-
+        is_transferred = 
         # Success evaluation
         criteria_satisfied = False
         # success_evaluation = analysis.get("successEvaluation", {})

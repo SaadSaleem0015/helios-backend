@@ -4,7 +4,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 import httpx
 from controllers.call_controller import get_call_details, handle_end_of_call_report
 from helpers.criteria_check import balance_count, has_payment_method, minimum_balance_for_call
-from helpers.jwt_token import get_admin, get_current_user
+from helpers.jwt_token import get_admin, get_current_user, get_active_user
 from models.assistant import Assistant
 from models.call_log import CallLog
 from models.lead import Lead
@@ -181,9 +181,12 @@ async def vapi_webhook(request: Request):
     
     
     user = await User.filter(id=purchased_num.user_id).first()
-      # Assuming user relation
+    # Assuming user relation
     if not user:
         return {"error": "Account not found for this number."}
+
+    if not user.is_active:
+        return {"error": "This account is inactive. Please contact support."}
 
     # Your balance/threshold check (adapt to your logic)
     # Example: require at least $5 or whatever your min is
@@ -220,7 +223,7 @@ async def vapi_webhook(request: Request):
     # } 
 
 @assistant_router.post("/assistants")
-async def create_assistant(assistant: AssistantCreate, user: User = Depends(get_current_user)):
+async def create_assistant(assistant: AssistantCreate, user: User = Depends(get_active_user)):
     try:
         balance = await balance_count(user.id)
         if balance < 5:
@@ -624,7 +627,7 @@ async def get_assistant(assistant_id: int,user: Annotated[User, Depends(get_curr
         raise HTTPException(status_code=400, detail=f"{e}")
     
 @assistant_router.delete("/assistants/{assistant_id}")
-async def delete_assistant(assistant_id: int, user: Annotated[User, Depends(get_current_user)]):
+async def delete_assistant(assistant_id: int, user: Annotated[User, Depends(get_active_user)]):
     try:
         assistant = await Assistant.get_or_none(id=assistant_id)
         if not assistant:
@@ -662,7 +665,7 @@ async def delete_assistant(assistant_id: int, user: Annotated[User, Depends(get_
         raise HTTPException(status_code=400, detail=f"{e}")
 
 @assistant_router.put("/update_assistant/{assistant_id}")
-async def update_assistant(assistant_id: str, assistant: AssistantCreate, user: Annotated[User, Depends(get_current_user)]):
+async def update_assistant(assistant_id: str, assistant: AssistantCreate, user: Annotated[User, Depends(get_active_user)]):
     try:
         existing_assistant = await Assistant.get_or_none(id=assistant_id)
         if not existing_assistant:
@@ -755,7 +758,7 @@ async def update_assistant(assistant_id: str, assistant: AssistantCreate, user: 
         raise HTTPException(status_code=500, detail="An internal server error occurred. Please try again later.")
   
 @assistant_router.post("/attach-number-to-assistant")
-async def attach_number_to_assistant(request: AttachNumberRequest, user: User = Depends(get_current_user)):
+async def attach_number_to_assistant(request: AttachNumberRequest, user: User = Depends(get_active_user)):
     try:
         assistant = await Assistant.get(id=request.assistant_id, user=user)
         phonenumber = await PurchasedNumber.get(phone_number=request.phone_number)
@@ -827,7 +830,7 @@ async def attach_number_to_assistant(request: AttachNumberRequest, user: User = 
 async def assistant_call(
     vapi_assistant_id: str,
     lead_id: int,
-    user: Annotated[User, Depends(get_current_user)],
+    user: Annotated[User, Depends(get_active_user)],
     background_tasks: BackgroundTasks 
 ):
     try:
@@ -1668,6 +1671,8 @@ async def assistant_call(
         return {"success": False, "detail": "Assistant not found."}
 
     user = await User.filter(id=assistant.user_id).first()
+    if not user or not user.is_active:
+        return {"success": False, "detail": "This assistant's account is inactive."}
 
     if not assistant.vapi_phone_uuid:
         phoneNumber = await PurchasedNumber.filter(user=user).first()
