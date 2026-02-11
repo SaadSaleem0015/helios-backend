@@ -85,11 +85,21 @@ async def get_user_call_logs(user: Annotated[User, Depends(get_current_user)]):
         if not call_logs:
             return []
 
-        # Convert to list of dicts, excluding 'cost'
+        # Convert to list of dicts, excluding certain fields
         result = []
         for log in call_logs:
-            log_dict = log.__dict__.copy()  # get all fields
-            log_dict.pop("cost", None)      # remove 'cost' if exists
+            log_dict = log.__dict__.copy()
+            
+            # Remove call log sensitive fields
+            log_dict.pop("cost", None)
+            log_dict.pop("vapi_id", None)
+
+            # Remove password from nested user
+            if hasattr(log, "user") and log.user:
+                user_dict = log.user.__dict__.copy()
+                user_dict.pop("password", None)
+                log_dict["user"] = user_dict
+
             result.append(log_dict)
         
         return result
@@ -98,6 +108,8 @@ async def get_user_call_logs(user: Annotated[User, Depends(get_current_user)]):
         print("An error occurred while retrieving call logs:")
         print(str(e))
         raise HTTPException(status_code=400, detail=f"{str(e)}")
+
+
 @calllogs_router.get("/specific-number-call-logs/{phoneNumber}")
 async def call_details(phoneNumber: str, user:Annotated[User, Depends(get_current_user)]):
     try:
@@ -157,14 +169,10 @@ async def get_call(call_id: str,user: Annotated[User, Depends(get_current_user)]
             "status": call_data.get("status", "Unknown"),
             "call_ended_at":call_data.get("endedAt", None),
             "call_started_at":call_data.get("startedAt", None),
-            "cost": call_data.get("cost", 0),
             "created_at": call_data.get("createdAt", "Unknown"),
             "updated_at": call_data.get("updatedAt", "Unknown"),
             "call_duration": call_duration,  
-            "assistant": {
-                "id": call_data.get("assistantId", "Unknown"),
-                "name": call_data.get("assistant", {}).get("name", "Unknown assistant"),
-            },
+      
             "variableValues": { 
                 "name": call_data.get("assistantOverrides", {}).get("variableValues", {}).get("name", "Unknown"),
                 "email": call_data.get("assistantOverrides", {}).get("variableValues", {}).get("email", "Unknown"),
