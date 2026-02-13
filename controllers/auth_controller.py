@@ -378,7 +378,7 @@ async def login_as_user(id:int , user:dict = Depends(get_admin)):
     if not target_user.is_active:
        return {"success": False, "detail": "Unable to login, user is suspend."}
 
-    token = generate_user_token(target_user)
+    token = generate_user_token({ "id": target_user.id })
     return { 
                 "success": True,
                 "user_role": target_user.role,
