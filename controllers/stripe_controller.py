@@ -315,15 +315,15 @@ async def makePayment(data: makePayment , user:Annotated[User, Depends(get_curre
             }
        
     except stripe.error.InvalidRequestError as e:
-    if "No such paymentmethod" in str(e):
+        if "No such paymentmethod" in str(e):
+            raise HTTPException(
+                status_code=400,
+                detail="The selected payment method is a test card and cannot be used in live mode. Please add a valid payment card and try again."
+            )
         raise HTTPException(
             status_code=400,
-            detail="The selected payment method is a test card and cannot be used in live mode. Please add a valid payment card and try again."
+            detail="Invalid payment request. Please verify your payment details and try again."
         )
-    raise HTTPException(
-        status_code=400,
-        detail="Invalid payment request. Please verify your payment details and try again."
-    )
 
     except Exception as e:
         raise HTTPException(
