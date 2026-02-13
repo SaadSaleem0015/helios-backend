@@ -58,28 +58,42 @@ async def get_logs(admin: Annotated[User, Depends(get_admin)]):
     result = []
     for user in users:
         print(user.id)
-        # time_left = await TimeLimit.filter(user=user).first()
-        
-            # if company.id == 16:
-                # print(company.id, company.admin_name, main_admin.submit_for_approval)
-            # print(" main_admin.is_active", main_admin.name)
+   
         balance = await check_balance(user.id) if user else 0
         result.append({
                 "id": user.id,
                 "name": user.name if user else '',
-                # "submit_for_approval": main_admin.submit_for_approval if main_admin else False,
+                "email":user.email if user else '',
                 "balance": balance,
-                # "criteria_approved": main_admin.criteria_approved if main_admin else False,
                 "is_active": user.is_active if user  else False,
-                # "role": main_admin.role ,
-                # "min_left":time_left.seconds/60 if time_left else 0,
-                "email_confirmed" : user.email_verified,
-                # "hidden" : main_admin.hidden if main_admin else False,
-                # "requestTrial":main_admin.request_trial,
-                "inComplete_profiles":user
+              
             })
 
     return result
+@admin_router.patch("/users/{user_id}/toggle-status")
+async def toggle_user_status(
+    user_id: int,
+    admin: Annotated[User, Depends(get_admin)]
+):
+    # Find user
+    user = await User.filter(id=user_id, type="user").first()
+
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found."
+        )
+
+    # Toggle status
+    user.is_active = not user.is_active
+    await user.save()
+
+    return {
+        "success": True,
+        "message": f"User has been {'activated' if user.is_active else 'deactivated'} successfully.",
+        "user_id": user.id,
+        "is_active": user.is_active
+    }
 
 @admin_router.put("/user/{userId}/live")
 async def live_account(userId: int,user: Annotated[User, Depends(get_admin)]):

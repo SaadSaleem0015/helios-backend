@@ -314,8 +314,23 @@ async def makePayment(data: makePayment , user:Annotated[User, Depends(get_curre
                 "detail": f"Payment failed with status: {payment_intent['status']}.",
             }
        
+    except stripe.error.InvalidRequestError as e:
+    if "No such paymentmethod" in str(e):
+        raise HTTPException(
+            status_code=400,
+            detail="The selected payment method is a test card and cannot be used in live mode. Please add a valid payment card and try again."
+        )
+    raise HTTPException(
+        status_code=400,
+        detail="Invalid payment request. Please verify your payment details and try again."
+    )
+
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Internal server error: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="An unexpected error occurred while processing the payment. Please try again later."
+        )
+
 
 
 # @stripe_router.post("/subscribe-plan/{id}")
