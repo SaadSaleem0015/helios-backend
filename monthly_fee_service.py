@@ -18,7 +18,10 @@ import asyncio
 stripe.api_key = os.environ.get("STRIPE_API_KEY")
 from helpers.tortoise_config import init_tortoise
 from tortoise import Tortoise
-
+from models.auto_replenishment import AutoReplenishment
+from helpers.criteria_check import balance_count
+from models.spent import Spent
+import uuid
 # ==============================
 # GET MONTHLY FEE (IN DOLLARS)
 # ==============================
@@ -99,6 +102,7 @@ async def process_payment(
                 amount_paid=payment_intent["amount"] / 100,
                 amount_received=payment_intent["amount_received"] / 100,
                 token=payment_intent["id"],
+                description="Monthly Fee"
             )
 
             print("[SUCCESS] Payment recorded in database")
@@ -214,17 +218,100 @@ async def deduct_monthly_fee_from_user(user: User):
 # ==============================
 # PROCESS ALL ACTIVE USERS
 # ==============================
+# ==============================
+# PROCESS ALL ACTIVE USERS (MONTHLY + AUTO-REPLENISHMENT)
+# ==============================
 async def process_all_users_monthly_fee():
+    print("\n========== STARTING MONTHLY FEE & AUTO-REPLENISHMENT PROCESS ==========\n")
 
-    print("\n========== STARTING MONTHLY FEE PROCESS ==========\n")
-
-    users = await User.filter(is_active=True)
-
+    users = await User.filter(is_active=True).all()
+    user_setting = await DefaultSettings.first()
     successful = 0
     failed = 0
     skipped = 0
 
     for user in users:
+        # --------------------------
+        # Check user balance
+        # --------------------------
+        balance = await balance_count(user.id)
+        auto_payment = await AutoReplenishment.filter(user=user).first()
+
+        # Reset low_balance_email_sent if balance >= 20
+        if balance >= 20 and user.low_balance_email_sent:
+            user.low_balance_email_sent = False
+            await user.save()
+            print(f"[INFO] Reset low_balance_email_sent for user {user.email}")
+
+        # --------------------------
+        # AUTO-REPLENISHMENT
+        # --------------------------
+        if auto_payment and auto_payment.replenishment and balance < 20:
+            try:
+                primary_method = await PaymentMethod.filter(is_primary=True, user=user).first()
+                if not primary_method:
+                    print(f"[WARN] No primary payment method for user {user.email}")
+                else:
+                    print(f"[INFO] Charging $100 for auto-replenishment for user {user.email}")
+                    customers = stripe.Customer.list(email=user.email)
+                    if customers.data:
+                        customer = customers.data[0]
+                    else:
+                        customer = stripe.Customer.create(
+                            email=user.email,
+                            name=user.name
+                        )
+
+                    payment_intent = stripe.PaymentIntent.create(
+                        amount=100 * 100,
+                        currency="usd",
+                        customer=customer["id"],
+                        payment_method=primary_method.payment_method_id,
+                        confirm=True,
+                        automatic_payment_methods={'enabled': True, 'allow_redirects': 'never'},
+                        idempotency_key=str(uuid.uuid4())
+                    )
+
+                    if payment_intent["status"] == "succeeded":
+                        await Payment.create(
+                            user=user,
+                            amount_paid=payment_intent["amount"] / 100,
+                            amount_received=payment_intent["amount_received"] / 100,
+                            auto_replenishment=True,
+                            token=payment_intent["id"],
+                            description="Auto-replenishment"
+                        )
+
+                    
+
+                        send_email(
+                            user.email,
+                            "Auto-Replenishment Charged",
+                            f"Dear {user.name},\n\n$100 has been charged to your account automatically due to low balance."
+                        )
+
+                        print(f"[AUTO-REPLENISHMENT] Charged $100 to user {user.email}")
+                    else:
+                        print(f"[AUTO-REPLENISHMENT] Payment failed: {payment_intent['status']}")
+            except Exception as e:
+                print(f"[ERROR] Auto-replenishment payment error for {user.email}: {e}")
+
+        # --------------------------
+        # LOW BALANCE EMAIL (if auto-replenishment not enabled)
+        # --------------------------
+        elif balance < 20 and not user.low_balance_email_sent:
+            send_email(
+                user.email,
+                "Low Balance Alert",
+                f"Dear {user.name},\n\nYour balance is low. Please top up to continue services."
+            )
+            user.low_balance_email_sent = True
+            await user.save()
+            print(f"[LOW BALANCE] Email sent to {user.email}")
+
+        # --------------------------
+        # MONTHLY FEE DEDUCTION
+        # --------------------------
         success, message = await deduct_monthly_fee_from_user(user)
 
         if success:
@@ -250,17 +337,12 @@ async def process_all_users_monthly_fee():
 
 
 
-
 async def main():
-    print("Initializing database...")
-    await init_tortoise()
-    print("Database connected.")
+     print("Initializing database...") 
+     await init_tortoise() 
+     print("Database connected.")
+     await process_all_users_monthly_fee() 
+     await Tortoise.close_connections() 
 
-    await process_all_users_monthly_fee()
-
-    await Tortoise.close_connections()
-    print("Database connection closed.")
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
+     print("Database connection closed.") 
+if __name__ == "__main__": asyncio.run(main())

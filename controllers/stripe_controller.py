@@ -268,6 +268,7 @@ async def makePayment(data: makePayment , user:Annotated[User, Depends(get_curre
                 amount_received=payment_intent["amount_received"] / 100,
                 auto_replenishment = auto,
                 token=payment_intent["id"],  
+                description="Payment Received"
             )
             # second_price = await SuperAdminSetting.filter(user=user).first()
             # for now chnage it later 
@@ -504,6 +505,7 @@ async def process_payment(payment_data: dict, user: User):
                 amount_received=payment_intent["amount_received"] / 100,
                 auto_replenishment=payment_data['autoReplenishment'],
                 token=payment_intent["id"],
+                description="Payment Received"
             )
 
             second_price = await SuperAdminSetting.filter(user=user).first()

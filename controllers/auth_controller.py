@@ -371,3 +371,18 @@ async def get_profile(user: Annotated[User, Depends(get_admin)]):
         "created_at" : user.created_at
        
     }
+
+@auth_router.post("/login_as_user/{id}")
+async def login_as_user(id:int , user:dict = Depends(get_admin)):
+    target_user = await User.filter(id=id).first()
+    if not target_user.is_active:
+       return {"success": False, "detail": "Unable to login, user is suspend."}
+
+    token = generate_user_token(target_user)
+    return { 
+                "success": True,
+                "user_role": target_user.role,
+                "token": token ,
+                "verified" :target_user.email_confirmed,
+                "adminLogin":True
+                  }

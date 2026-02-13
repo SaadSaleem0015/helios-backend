@@ -23,6 +23,7 @@ class User(Model):
     submit_for_approval = fields.BooleanField(default=False)
     last_fee_deducted = fields.DatetimeField(null=True)
     fee_reminder_email = fields.BooleanField(default=False)
+    low_balance_email_sent = fields.BooleanField(default=False)
     fee_reminder_tries = fields.IntField(default=0)
     files: fields.ReverseRelation['File']
     settings: fields.ReverseRelation['Setting']

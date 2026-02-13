@@ -6,6 +6,7 @@ class Payment(Model):
     user = fields.ForeignKeyField("models.User", related_name="payments") 
     amount_paid = fields.FloatField()
     amount_received = fields.FloatField()
+    description = fields.CharField(max_length=255, null=True)
     name_on_card = fields.CharField(max_length=255 , null=True)
     address = fields.CharField(max_length=255,null=True)
     city = fields.CharField(max_length=100,null=True)
