@@ -381,7 +381,7 @@ async def login_as_user(id:int , user:dict = Depends(get_admin)):
     token = generate_user_token({ "id": target_user.id })
     return { 
                 "success": True,
-                "user_role": target_user.role,
+                "user_role": target_user.type,
                 "token": token ,
                 "verified" :target_user.email_confirmed,
                 "adminLogin":True
