@@ -70,7 +70,7 @@ async def get_logs(admin: Annotated[User, Depends(get_admin)]):
             })
 
     return result
-@admin_router.patch("/users/{user_id}/toggle-status")
+@admin_router.put("/users/{user_id}/toggle-status")
 async def toggle_user_status(
     user_id: int,
     admin: Annotated[User, Depends(get_admin)]
