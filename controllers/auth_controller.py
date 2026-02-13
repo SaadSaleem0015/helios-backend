@@ -383,6 +383,6 @@ async def login_as_user(id:int , user:dict = Depends(get_admin)):
                 "success": True,
                 "user_role": target_user.type,
                 "token": token ,
-                "verified" :target_user.verified,
+                "verified" :target_user.email_verified,
                 "adminLogin":True
                   }
