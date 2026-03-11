@@ -298,7 +298,6 @@ async def get_call_details(call_id: str, delay: int ,user_id :int, lead_id : Opt
     try:
         print(f"Task will run after {delay}")
         await asyncio.sleep(delay)
-        print(delay)
         call_detail_url = f"https://api.vapi.ai/call/{call_id}"
         async with httpx.AsyncClient() as client:
             response = await client.get(call_detail_url, headers=get_headers())
@@ -329,7 +328,6 @@ async def get_call_details(call_id: str, delay: int ,user_id :int, lead_id : Opt
             prmpt_list = [dnc.prompt for dnc in dnc_prompts]
             dnc_result = await analyze_dnc(transcript, prmpt_list)
             dnc = dnc_result.get("dnc_detected", False)
-            print(f"is requested for DNC: {dnc}")
         except Exception as e:
             print(f"Error in analyze_dnc but continue to save other call logs: {str(e)}")
             dnc = False
@@ -347,7 +345,6 @@ async def get_call_details(call_id: str, delay: int ,user_id :int, lead_id : Opt
         try:
             transfer_result = await analyze_call_transfer(transcript)
             is_transferred = transfer_result.get("isTransferred", False)
-            print(f"is talk with human : {is_transferred}")
         except Exception as e:
             print(f"Error in analyze_call_transfer but continue to save other call logs: {str(e)}")
             is_transferred = False
@@ -680,9 +677,7 @@ async def analyze_dnc(transcript: str, dnc_prompts: list) -> dict:
 async def handle_end_of_call_report(payload):
     """Handle end-of-call-report and save to CallLog"""
     try:
-        print("\n========== END OF CALL REPORT RECEIVED ==========")
 
-        print("payload", payload)
         message = payload.get("message", {})
 
         call_data = message.get("call", {})
@@ -701,14 +696,7 @@ async def handle_end_of_call_report(payload):
 
         cost = message.get("cost", 0.0)
 
-        print("\nCALL META:")
-        print("Vapi Call ID:", vapi_call_id)
-        print("Call Type:", call_type)
-        print("Started At:", started_at)
-        print("Ended At:", ended_at)
-        print("Ended Reason:", ended_reason)
-        print("Cost:", cost)
-
+    
         # ✅ Correct number extraction (VERY IMPORTANT)
         customer_number = call_data.get("customer", {}).get("number")
         called_number = message.get("phoneNumber", {}).get("number")
@@ -716,7 +704,6 @@ async def handle_end_of_call_report(payload):
         lead_number = None
         lead_name  = None
         lead_id = None
-        print("customer_number",customer_number)
         if customer_number:
             lead = await Lead.filter(mobile=customer_number).first()
             if lead:
@@ -757,7 +744,6 @@ async def handle_end_of_call_report(payload):
         try:
             transfer_result = await analyze_call_transfer(transcript)
             is_transferred = transfer_result.get("isTransferred", False)
-            print(f"is talk with human : {is_transferred}")
         except Exception as e:
             print(f"Error in analyze_call_transfer but continue to save other call logs: {str(e)}")
             is_transferred = False
@@ -792,8 +778,6 @@ async def handle_end_of_call_report(payload):
 
         call_log_data = {k: v for k, v in call_log_data.items() if v is not None}
 
-        print("\nFINAL CALL LOG DATA (SAVING):")
-        print(call_log_data)
 
         await CallLog.create(**call_log_data)
         user_settings = await SuperAdminSetting.filter(user=user).first()
@@ -811,7 +795,6 @@ async def handle_end_of_call_report(payload):
             description="Call Cost"
         )
         print("✅ CALL LOG SAVED SUCCESSFULLY")
-        print("===============================================\n")
 
     except Exception as e:
         print("❌ ERROR SAVING CALL LOG:", e)
