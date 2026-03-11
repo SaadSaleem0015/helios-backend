@@ -1770,3 +1770,72 @@ async def update_all_assistants():
             print(f"Unexpected error for assistant {assistant.name}: {e}")
 
     return {"status": "All assistants have been updated."}
+
+
+@assistant_router.put("/update-all-assistants-transcriber")
+async def update_all_assistants_transcriber():
+    """
+    Fetch all assistants from Vapi, match them by vapi_assistant_id with local DB,
+    and update the transcriber configuration to use Deepgram nova-2 (multi-language)
+    in both Vapi and the local Assistant records.
+    """
+    assistants = await Assistant.filter(vapi_assistant_id__isnull=False).all()
+
+    target_transcriber = {
+        "model": "nova-2",
+        "language": "multi",
+        "provider": "deepgram",
+    }
+
+    updated = 0
+    failed: list[str] = []
+
+    async with httpx.AsyncClient() as client:
+        for assistant in assistants:
+            if not assistant.vapi_assistant_id:
+                continue
+
+            url = f"https://api.vapi.ai/assistant/{assistant.vapi_assistant_id}"
+
+            try:
+                # Minimal PATCH: only send the transcriber field so we don't include read-only properties
+                patch_payload = {
+                    "transcriber": target_transcriber,
+                }
+
+                patch_response = await client.patch(url, json=patch_payload, headers=get_headers())
+                patch_response.raise_for_status()
+
+                # Update local DB fields to match
+                assistant.transcribe_provider = target_transcriber["provider"]
+                assistant.transcribe_model = target_transcriber["model"]
+                assistant.transcribe_language = target_transcriber["language"]
+                await assistant.save()
+
+                updated += 1
+                print(f"Transcriber updated for assistant {assistant.name} ({assistant.vapi_assistant_id})")
+
+            except httpx.RequestError as e:
+                msg = f"Request error for assistant {assistant.name} ({assistant.vapi_assistant_id}): {e}"
+                print(msg)
+                failed.append(msg)
+            except httpx.HTTPStatusError as e:
+                msg = (
+                    f"HTTP error for assistant {assistant.name} ({assistant.vapi_assistant_id}): "
+                    f"{e.response.status_code} - {e.response.text}"
+                )
+                print(msg)
+                failed.append(msg)
+            except Exception as e:
+                msg = f"Unexpected error for assistant {assistant.name} ({assistant.vapi_assistant_id}): {e}"
+                print(msg)
+                failed.append(msg)
+
+    return {
+        "success": True,
+        "detail": f"Transcriber updated for {updated} assistants.",
+        "total": len(assistants),
+        "updated": updated,
+        "failed": failed,
+        "transcriber": target_transcriber,
+    }
