@@ -53,7 +53,7 @@ async def check_balance(user_id: int) -> bool:
 
 @admin_router.get("/users")
 async def get_logs(admin: Annotated[User, Depends(get_admin)]):
-    users = await User.filter(type = "user").all()
+    users = await User.filter(type = "user").all().first("-id")
 
     result = []
     for user in users:
