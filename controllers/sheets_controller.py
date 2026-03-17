@@ -67,8 +67,8 @@ from models.sheetSyncLog import SheetSyncLog, SyncStatus
 from models.user import User
 from models.user_keys import UserKeys
 
-FRONTEND_BASE_URL = os.getenv("FRONTEND_BASE_URL", "http://localhost:5173")
-API_BASE_URL      = os.getenv("API_BASE_URL",      "http://localhost:8000")
+FRONTEND_BASE_URL = os.getenv("DOMAIN", "http://localhost:5173")
+API_BASE_URL      = os.getenv("API_BASE_URL","http://localhost:8000")
 
 sheets_router = APIRouter(prefix="/sheets", tags=["Google Sheets"])
 
