@@ -45,6 +45,9 @@ TORTOISE_CONFIG = {
                 "models.cal_integration",
                 "models.support_ticket",
                 "models.auto_replenishment",
+                "models.sheetColumnMapping",
+                "models.sheetSyncLog",
+                "models.user_keys",
                 "aerich.models"
             ]
         }

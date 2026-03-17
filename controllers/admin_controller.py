@@ -65,6 +65,7 @@ async def get_logs(admin: Annotated[User, Depends(get_admin)]):
                 "name": user.name if user else '',
                 "email":user.email if user else '',
                 "balance": balance,
+                "phone": user.phone if user else '',
                 "is_active": user.is_active if user  else False,
               
             })

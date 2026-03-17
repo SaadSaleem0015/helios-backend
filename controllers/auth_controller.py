@@ -1,7 +1,7 @@
 import datetime
 from fastapi import APIRouter, HTTPException, Depends
 from argon2 import PasswordHasher
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field, validator
 from typing import Annotated,Optional
 from models.user import User
 from models.code import Code
@@ -11,7 +11,7 @@ from helpers.jwt_token import generate_user_token, get_admin, get_current_user
 from helpers.email import generate_code
 from helpers.criteria_check import balance_count
 import pytz
-
+import re
 
 
 auth_router = APIRouter()
@@ -20,8 +20,29 @@ ph = PasswordHasher()
 
 class SignupPayload(BaseModel):
     name: str
-    email: EmailStr
+    email: str
     password: str
+    phone: str = Field(..., description="Phone number")
+
+    @validator('phone')
+    def validate_phone(cls, v):
+        # Remove any whitespace
+        phone = v.strip()
+        
+        # Remove common separators for validation
+        cleaned = re.sub(r'[\s\-\(\)]+', '', phone)
+        
+        # Check if it starts with + (international) or just digits
+        if cleaned.startswith('+'):
+            # International format: + followed by 8-15 digits
+            if not re.match(r'^\+\d{8,15}$', cleaned):
+                raise ValueError('Please enter a valid phone number (e.g., +1234567890 or 1234567890)')
+        else:
+            # Local format: 10-15 digits
+            if not re.match(r'^\d{10,15}$', cleaned):
+                raise ValueError('Phone number must be between 10-15 digits')
+        
+        return phone
 
 
 class LoginPayload(BaseModel):
@@ -63,16 +84,25 @@ class AccessChangePayload(BaseModel):
     name:str
     password:str
 
+
 @auth_router.post('/signup')
-async def  signup(payload: SignupPayload):
-    user = await User.filter(email = payload.email).first()
+async def signup(payload: SignupPayload):
+    # Check if user exists
+    user = await User.filter(email=payload.email).first()
     if user: 
         raise HTTPException(status_code=400, detail="User already exists")
+    
+    # Check if phone is already registered (optional)
+    existing_phone_user = await User.filter(phone=payload.phone).first()
+    if existing_phone_user:
+        raise HTTPException(status_code=400, detail="Phone number already registered")
+    
     try:
         user = User(
-            name = payload.name,
-            email = payload.email,
-            password = ph.hash(payload.password),
+            name=payload.name,
+            email=payload.email,
+            password=ph.hash(payload.password),
+            phone=payload.phone  # Add phone field here
         )
         await user.save()
 
@@ -94,36 +124,37 @@ async def  signup(payload: SignupPayload):
                 )
 
             await SuperAdminSetting.create(
-                    user=user,
-                    max_call_duration=default_setting.max_call_duration,
-                    max_calls=default_setting.max_calls,
-                    transfer_rate=default_setting.transfer_rate,
-                    monthly_fee=default_setting.monthly_fee,
-                    seconds_per_dollar=default_setting.seconds_per_dollar,
-                    call_frequency=default_setting.call_frequency,
-                    call_period_minutes=default_setting.call_period_minutes,
-                    max_call_limit_free_trial=default_setting.max_call_limit_free_trial,
-                    max_lead_limit_free_trial=default_setting.max_lead_limit_free_trial,
-                )
+                user=user,
+                max_call_duration=default_setting.max_call_duration,
+                max_calls=default_setting.max_calls,
+                transfer_rate=default_setting.transfer_rate,
+                monthly_fee=default_setting.monthly_fee,
+                seconds_per_dollar=default_setting.seconds_per_dollar,
+                call_frequency=default_setting.call_frequency,
+                call_period_minutes=default_setting.call_period_minutes,
+                max_call_limit_free_trial=default_setting.max_call_limit_free_trial,
+                max_lead_limit_free_trial=default_setting.max_lead_limit_free_trial,
+            )
         except Exception:
             # don't block signup on settings creation failure
             pass
 
-        is_email_sent:bool = await generate_code("account_activation", user=user)
-        if(is_email_sent):
+        is_email_sent: bool = await generate_code("account_activation", user=user)
+        if is_email_sent:
             return {
                 "success": True, 
                 "verify": True,
-                "detail": "Verification Email send successfully" ,
-            
-        }
+                "detail": "Verification email sent successfully",
+            }
         else:
             await user.delete()
-
-            return {"success": True, "message": "Verification email not sent"}
+            return {"success": False, "message": "Verification email not sent"}
+            
     except Exception as e:
-        raise HTTPException(status_code=400,detail=f"server error {e}")
-    
+        raise HTTPException(status_code=400, detail=f"Server error: {str(e)}")
+
+
+
 @auth_router.post("/login")
 async def signin(data: LoginPayload):
     user = await User.filter(email=data.email).first()

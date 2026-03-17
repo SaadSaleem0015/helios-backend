@@ -22,7 +22,7 @@ from controllers.lead_controller import leads_router
 from controllers.stripe_controller import stripe_router
 from controllers.crm_controller import crm_router
 from controllers.cal_controller import cal_booking_router
-
+from controllers.sheets_controller import sheets_router
 
 
 
@@ -55,6 +55,8 @@ app.include_router(dnc_router, prefix='/api', tags=['DNC'])
 app.include_router(hubspot_router, prefix='/api/crm', tags=['Hubspot'])
 app.include_router(cal_booking_router, prefix = "/api", tags=["Cal"])
 app.include_router(support_router, prefix = "/api", tags=["Support"])
+app.include_router(sheets_router, prefix = "/api", tags=["Google Sheets"])
+
 
 
 

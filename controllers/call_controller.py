@@ -28,11 +28,15 @@ from typing import Optional
 import httpx
 import requests
 import os
-
+from helpers.sheet_writer import build_row_from_mapping, get_valid_access_token, append_row_to_sheet
+from models.user_keys import UserKeys
 calllogs_router = APIRouter()
 token = generate_token()
+from models.sheetColumnMapping import SheetColumnMapping
+from models.sheetSyncLog import SheetSyncLog
+import json
 
-   
+
 @calllogs_router.get("/all_call_logs")
 async def get_logs(user: Annotated[User, Depends(get_admin)]):
     logs = await CallLog.all().select_related("user")
@@ -795,7 +799,135 @@ async def handle_end_of_call_report(payload):
             description="Call Cost"
         )
         print("✅ CALL LOG SAVED SUCCESSFULLY")
-
+        if user:
+            transcript = message.get("transcript", "") or ""
+            print("Han transcript for sheet sync:", transcript[:100], "...")
+            await sync_call_to_sheet(
+                user=user,
+                transcript=transcript,
+                call_ended_reason=ended_reason or "",
+                call_datetime=ended_at or started_at or "",
+            )
     except Exception as e:
         print("❌ ERROR SAVING CALL LOG:", e)
         return {"error": f"Unable to save the call logs: {e}"}
+
+
+
+
+async def extract_sheet_fields(transcript: str, mapped_fields: list) -> dict:
+    """
+    Extract only the fields the user has mapped in their column config.
+    mapped_fields is a list like ["first_name", "phone_number", "city"]
+    """
+    if not transcript or not mapped_fields:
+        return {}
+
+    fields_str = ", ".join(mapped_fields)
+
+    prompt = f"""
+    You are extracting specific information from a call transcript.
+    Extract ONLY these fields: {fields_str}
+    
+    Rules:
+    - Return null for any field not clearly mentioned
+    - Return ONLY a JSON object, no explanation, no markdown
+    - field names must match exactly as given
+    
+    Transcript:
+    {transcript}
+    """
+
+    model = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+    output_parser = StrOutputParser()
+    prompt_template = ChatPromptTemplate.from_template(prompt)
+    chain = prompt_template | model | output_parser
+
+    try:
+        result = await chain.ainvoke({"transcript": transcript})
+        # Strip markdown fences if present
+        result = result.strip()
+        if result.startswith("```"):
+            result = "\n".join(result.splitlines()[1:-1])
+        return json.loads(result)
+    except Exception as e:
+        print(f"❌ Sheet field extraction failed: {e}")
+        return {}
+
+
+def _is_google_connected(keys: UserKeys) -> bool:
+    return bool(
+        keys
+        and keys.google_access_token
+        and keys.google_refresh_token
+    )
+
+
+async def sync_call_to_sheet(user, transcript: str, call_ended_reason: str, call_datetime: str):
+    """
+    Check if user has Google Sheets configured.
+    If yes, extract fields and write a row.
+    """
+    try:
+        # Get user's sheet config
+        user_keys = await UserKeys.filter(user=user).order_by('-id').first()
+        if not user_keys:
+            return
+
+        print(f"User {user.id} has sheet config: {user_keys.sheet_id}, tab: {user_keys.sheet_tab_name}")
+        if not _is_google_connected(user_keys):
+            return
+        if not user_keys.sheet_id:
+            return
+        print("Google Sheets integration detected, proceeding with field extraction and sheet sync...")
+
+        # Get column mapping
+        mapping = await SheetColumnMapping.filter(user=user).order_by('-id').first()
+        if not mapping:
+            return
+        print(f"User {user.id} has sheet column mapping: {mapping}")
+        # Build field map — only fields that have a column assigned
+        field_map = {
+            "first_name":        mapping.first_name_col,
+            "last_name":         mapping.last_name_col,
+            "phone_number":      mapping.phone_number_col,
+            "address":           mapping.address_col,
+            "city":              mapping.city_col,
+            "job_description":   mapping.job_description_col,
+            "call_ended_reason": mapping.call_ended_reason_col,
+            "call_datetime":     mapping.call_datetime_col,
+        }
+        print(f"Field to column mapping for user {user.id}: {field_map}")
+
+        active_fields = [f for f, col in field_map.items() if col]
+        if not active_fields:
+            return
+        print(f"Active fields for extraction for user {user.id}: {active_fields}")
+        # Separate LLM fields vs metadata fields
+        llm_fields = [f for f in active_fields if f not in ("call_ended_reason", "call_datetime")]
+        extracted = {}
+
+        if llm_fields:
+            extracted = await extract_sheet_fields(transcript, llm_fields)
+        print(f"Extracted fields for user {user.id}: {extracted}")
+        # Add metadata directly — no LLM needed for these
+        if "call_ended_reason" in active_fields:
+            extracted["call_ended_reason"] = call_ended_reason
+        if "call_datetime" in active_fields:
+            extracted["call_datetime"] = call_datetime
+
+        # Build the row using column mapping
+        row = build_row_from_mapping(mapping, extracted)
+        if not row:
+            return
+        print(f"Built row for user {user.id}: {row}")
+        access_token = await get_valid_access_token(user_keys)
+        print(f"Got access token for user {user.id}, syncing to sheet...")
+        tab = user_keys.sheet_tab_name or "Sheet1"
+        await append_row_to_sheet(access_token, user_keys.sheet_id, tab, row)
+        
+        print(f"✅ SHEET ROW WRITTEN for user {user.id}")
+
+    except Exception as e:
+        print(f"❌ SHEET SYNC FAILED for user {user.id}: {e}")
+        # Never raise — sheet failure must never break call log saving

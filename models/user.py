@@ -15,6 +15,7 @@ class User(Model):
     type = fields.CharEnumField(enum_type=UserType, max_length=6, default=UserType.USER)
     email = fields.CharField(max_length=255)
     email_verified = fields.BooleanField(default=False)
+    phone = fields.CharField(max_length=255, null = True)
     password = fields.CharField(max_length=255)
     created_at = fields.DatetimeField(auto_now_add=True)
     updated_at = fields.DatetimeField(auto_now=True)
