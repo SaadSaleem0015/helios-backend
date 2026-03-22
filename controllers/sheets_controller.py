@@ -360,33 +360,39 @@ async def google_oauth_callback(
 
     # User denied consent on Google's page
     if error:
+        print(">>> FAILED: access_denied")   
         return RedirectResponse(url=f"{error_redirect}access_denied")
 
     if not code or not state:
+        print(">>> FAILED: missing_params")
         return RedirectResponse(url=f"{error_redirect}missing_params")
 
     # Decode & validate state → get user_id
     try:
         user_id = _decode_oauth_state(state)
     except HTTPException:
+        print(">>> FAILED: invalid_state") 
         return RedirectResponse(url=f"{error_redirect}invalid_state")
 
     # Fetch user
     user = await User.get_or_none(id=user_id)
     if not user or not user.is_active:
+        print(">>> FAILED: user_not_found")                         
         return RedirectResponse(url=f"{error_redirect}user_not_found")
 
     # Exchange code for tokens
     try:
         token_data = await exchange_code_for_tokens(code)
     except httpx.HTTPStatusError:
+        print(">>> FAILED: token_exchange_failed", e.response.text) 
         return RedirectResponse(url=f"{error_redirect}token_exchange_failed")
 
     access_token  = token_data.get("access_token")
     refresh_token = token_data.get("refresh_token")
     expires_in    = token_data.get("expires_in", 3600)
-
+   
     if not access_token or not refresh_token:
+        print(">>> FAILED: no_refresh_token")
         # refresh_token absent when user had previously authorized and we
         # didn't include prompt=consent — shouldn't happen with our URL config
         return RedirectResponse(url=f"{error_redirect}no_refresh_token")
@@ -410,7 +416,7 @@ async def google_oauth_callback(
         user_keys.webhook_secret = secrets.token_urlsafe(32)
 
     await user_keys.save()
-
+    print(">>> SUCCESS: saving tokens")
     return RedirectResponse(
         url=f"{FRONTEND_BASE_URL}/integrations/sheets?sheet_connected=true"
     )
