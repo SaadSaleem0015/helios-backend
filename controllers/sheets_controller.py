@@ -370,12 +370,14 @@ async def google_oauth_callback(
     # Decode & validate state → get user_id
     try:
         user_id = _decode_oauth_state(state)
+        print(">>> DECODED user_id:", user_id)
     except HTTPException:
         print(">>> FAILED: invalid_state") 
         return RedirectResponse(url=f"{error_redirect}invalid_state")
 
     # Fetch user
     user = await User.get_or_none(id=user_id)
+    print(">>> USER QUERY RESULT:", user)
     if not user or not user.is_active:
         print(">>> FAILED: user_not_found")                         
         return RedirectResponse(url=f"{error_redirect}user_not_found")
