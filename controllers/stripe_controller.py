@@ -230,6 +230,8 @@ async def primaryMethod(user:Annotated[User, Depends(get_current_user)]):
 @stripe_router.post("/make-payment")
 async def makePayment(data: makePayment , user:Annotated[User, Depends(get_current_user)]):
     time_limit =  await TimeLimit.filter(user=user).first()
+    if data.amount <= 19:
+        raise HTTPException(status_code=400, detail="Minimum payment amount is $20.")
     try:
         primaryMethod = await PaymentMethod.filter(id=data.paymentMethodId).first()
         if not primaryMethod:
