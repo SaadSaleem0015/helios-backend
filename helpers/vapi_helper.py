@@ -244,7 +244,7 @@ async def user_add_payload(assistant_data,user):
             ],
             "on": "customer.speech.timeout",
             "options": {
-                "timeoutSeconds": 10,
+                "timeoutSeconds": 15,
                 "triggerMaxCount": 1,
                 "triggerResetMode": "onUserSpeech"
             }
@@ -253,7 +253,7 @@ async def user_add_payload(assistant_data,user):
             {
             "on": "customer.speech.timeout",
             "options": {
-                "timeoutSeconds": 18,
+                "timeoutSeconds": 30,
                 "triggerMaxCount": 1,
                 "triggerResetMode": "onUserSpeech"
             },
@@ -488,7 +488,7 @@ async def assistant_payload(assistant_data):
             ],
             "on": "customer.speech.timeout",
             "options": {
-                "timeoutSeconds": 10,
+                "timeoutSeconds": 15,
                 "triggerMaxCount": 1,
                 "triggerResetMode": "onUserSpeech"
             }
@@ -497,7 +497,7 @@ async def assistant_payload(assistant_data):
             {
             "on": "customer.speech.timeout",
             "options": {
-                "timeoutSeconds": 18,
+                "timeoutSeconds": 28,
                 "triggerMaxCount": 1,
                 "triggerResetMode": "onUserSpeech"
             },
