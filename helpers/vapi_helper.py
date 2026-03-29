@@ -231,8 +231,21 @@ async def user_add_payload(assistant_data,user):
         "name": assistant_data.name,
         "firstMessage": assistant_data.first_message,
         "endCallPhrases": assistant_data.endCallPhrases,
-          "startSpeakingPlan": {
-    "waitSeconds": 1.5
+     "startSpeakingPlan": {
+    "waitSeconds": 2,
+    "smartEndpointingPlan": {
+      "provider": "vapi"
+    },
+    "transcriptionEndpointingPlan": {
+      "onPunctuationSeconds": 0.6,
+      "onNoPunctuationSeconds": 2.5,
+      "onNumberSeconds": 1.0
+    }
+  },
+  "stopSpeakingPlan": {
+    "numWords": 3,
+    "voiceSeconds": 0.5,
+    "backoffSeconds": 1.5
   },
             "hooks": [
             {
@@ -475,8 +488,21 @@ async def assistant_payload(assistant_data):
         "name": assistant_data.name,
         "firstMessage": assistant_data.first_message,
         "endCallPhrases": assistant_data.endCallPhrases,
-          "startSpeakingPlan": {
-    "waitSeconds": 1.5
+ "startSpeakingPlan": {
+    "waitSeconds": 2,
+    "smartEndpointingPlan": {
+      "provider": "vapi"
+    },
+    "transcriptionEndpointingPlan": {
+      "onPunctuationSeconds": 0.6,
+      "onNoPunctuationSeconds": 2.5,
+      "onNumberSeconds": 1.0
+    }
+  },
+  "stopSpeakingPlan": {
+    "numWords": 3,
+    "voiceSeconds": 0.5,
+    "backoffSeconds": 1.5
   },
             "hooks": [
             {
