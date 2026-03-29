@@ -231,6 +231,7 @@ async def user_add_payload(assistant_data,user):
         "name": assistant_data.name,
         "firstMessage": assistant_data.first_message,
         "endCallPhrases": assistant_data.endCallPhrases,
+        "backgroundSound": "off",
      "startSpeakingPlan": {
     "waitSeconds": 2,
     "smartEndpointingPlan": {
@@ -488,6 +489,7 @@ async def assistant_payload(assistant_data):
         "name": assistant_data.name,
         "firstMessage": assistant_data.first_message,
         "endCallPhrases": assistant_data.endCallPhrases,
+        "backgroundSound": "off",
  "startSpeakingPlan": {
     "waitSeconds": 2,
     "smartEndpointingPlan": {
